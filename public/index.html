@@ -430,4 +430,362 @@
             document.getElementById('stat-total-change').innerText = `${completedVisits} completed`;
             document.getElementById('stat-opp-change').innerText = `Avg €${(totalOpp / (totalVisits || 1)).toFixed(0).toLocaleString()}`;
             document.getElementById('stat-completion-rate').innerText = `${completionRate}% completion`;
-            document.getElementById('stat-customers-change').innerText = `${customers.filter(c => c["80-
+            document.getElementById('stat-customers-change').innerText = `${customers.filter(c => c["80-20"] === "A").length} Grade A customers`;
+
+            renderCharts();
+            renderLeaderboard();
+        }
+
+        function renderCharts() {
+            // Destroy old charts
+            Object.values(charts).forEach(chart => chart?.destroy());
+            charts = {};
+
+            // Status Chart
+            const statusData = {
+                Completed: visits.filter(v => v.Status === 'Completed').length,
+                Planned: visits.filter(v => v.Status === 'Planned').length,
+                Pending: visits.filter(v => v.Status === 'Pending').length
+            };
+            
+            charts.status = new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusData),
+                    datasets: [{
+                        data: Object.values(statusData),
+                        backgroundColor: ['#10b981', '#2563eb', '#f59e0b']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+
+            // Trend Chart
+            const monthlyData = {};
+            visits.forEach(v => {
+                const month = v["Visit Date"] ? v["Visit Date"].substring(0, 7) : 'Unknown';
+                monthlyData[month] = (monthlyData[month] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthlyData).sort();
+
+            charts.trend = new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: sortedMonths,
+                    datasets: [{
+                        label: 'Visits',
+                        data: sortedMonths.map(m => monthlyData[m]),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // Customer Chart (Top 10)
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            const topCustomers = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            charts.customer = new Chart(document.getElementById('customerChart'), {
+                type: 'bar',
+                data: {
+                    labels: topCustomers.map(c => c[0]),
+                    datasets: [{
+                        label: 'Opportunity Value (€)',
+                        data: topCustomers.map(c => c[1]),
+                        backgroundColor: '#2563eb'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Country Chart
+            const countryData = {};
+            visits.forEach(v => {
+                const country = v.COUNTRY || 'Unknown';
+                countryData[country] = (countryData[country] || 0) + 1;
+            });
+
+            charts.country = new Chart(document.getElementById('countryChart'), {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(countryData),
+                    datasets: [{
+                        data: Object.values(countryData),
+                        backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        function renderLeaderboard() {
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            
+            const sorted = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const html = sorted.map((item, idx) => `
+                <div class="leaderboard-item">
+                    <div class="leaderboard-rank">${idx + 1}</div>
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">${item[0]}</div>
+                    </div>
+                    <div class="leaderboard-value">€${item[1].toLocaleString()}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('leaderboard').innerHTML = html || '<p style="padding:1rem; text-align:center; color:var(--text-muted);">No data available</p>';
+        }
+
+        // --- DROPDOWN LOGIC ---
+        function renderCustomerDropdown() {
+            const select = document.getElementById('customer_select');
+            select.innerHTML = '<option value="" disabled selected>-- Select Customer --</option>';
+            
+            if(customers.length === 0) {
+                select.innerHTML += '<option disabled>No customers in database</option>';
+                return;
+            }
+
+            customers.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c._id;
+                opt.text = `${c["Customer Code"]} - ${c["COMPANY"]}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function onCustomerSelectChange(selectEl) {
+            const customerId = selectEl.value;
+            if (!customerId) return;
+
+            const customer = customers.find(c => c._id == customerId);
+            if (customer) {
+                document.getElementById('v_code').value = customer["Customer Code"] || "";
+                document.getElementById('v_company').value = customer["COMPANY"] || "";
+                document.getElementById('v_country').value = customer["COUNTRY"] || "";
+                document.getElementById('v_address').value = customer["ADDRESS"] || "";
+                document.getElementById('v_place').value = "";
+            }
+        }
+
+        // --- RENDER TABLE ---
+        function renderView() {
+            const tableHead = document.querySelector('#dataTable thead');
+            const tableBody = document.querySelector('#dataTable tbody');
+            const data = currentTab === 'visits' ? visits : customers;
+            const schema = currentTab === 'visits' 
+                ? ["Customer Code", "COMPANY", "COUNTRY", "Visit Plan", "Visit Date", "Status"] 
+                : ["Customer Code", "COMPANY", "COUNTRY", "80-20"];
+
+            tableHead.innerHTML = `<tr>${schema.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
+            tableBody.innerHTML = '';
+
+            data.forEach(row => {
+                let tr = `<tr>`;
+                schema.forEach(k => {
+                    let val = row[k];
+                    if(k === 'Status') val = `<span class="status-badge badge-${val.toLowerCase()}">${val}</span>`;
+                    tr += `<td>${val || ''}</td>`;
+                });
+                tr += `<td>
+                    <span onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:10px; font-size:1.2rem;">✏️</span>
+                    <span onclick="deleteEntry('${row._id}')" style="cursor:pointer; font-size:1.2rem;">🗑️</span>
+                </td></tr>`;
+                tableBody.insertAdjacentHTML('beforeend', tr);
+            });
+        }
+
+        // --- MODAL ---
+        function openModal(row = null) {
+            document.getElementById('entryModal').classList.add('open');
+            if(currentTab === 'visits') {
+                document.getElementById('visitForm').style.display = 'block';
+                document.getElementById('customerForm').style.display = 'none';
+                renderCustomerDropdown();
+
+                if(row) {
+                    const matchingCustomer = customers.find(c => c["Customer Code"] === row["Customer Code"]);
+                    document.getElementById('customer_select').value = matchingCustomer ? matchingCustomer._id : "";
+                    document.getElementById('v_editId').value = row._id;
+                    document.getElementById('v_code').value = row["Customer Code"] || "";
+                    document.getElementById('v_company').value = row["COMPANY"] || "";
+                    document.getElementById('v_country').value = row["COUNTRY"] || "";
+                    document.getElementById('v_address').value = row["ADDRESS"] || "";
+                    document.getElementById('v_place').value = row["PLACE"] || "";
+                    document.getElementById('v_plan').value = row["Visit Plan"] || "";
+                    document.getElementById('v_date').value = row["Visit Date"] || "";
+                    document.getElementById('v_status').value = row["Status"] || "Planned";
+                    document.getElementById('v_val').value = row["Opportunities Values I Euro"] || "";
+                    document.getElementById('v_remarks').value = row["Remarks"] || "";
+                } else {
+                    document.getElementById('visitForm').reset();
+                    document.getElementById('v_editId').value = "";
+                    document.getElementById('customer_select').value = "";
+                    document.getElementById('v_code').value = "";
+                }
+            } else {
+                document.getElementById('visitForm').style.display = 'none';
+                document.getElementById('customerForm').style.display = 'block';
+                if(row) {
+                    document.getElementById('c_editId').value = row._id;
+                    document.getElementById('c_code').value = row["Customer Code"] || "";
+                    document.getElementById('c_company').value = row["COMPANY"] || "";
+                    document.getElementById('c_country').value = row["COUNTRY"] || "";
+                    document.getElementById('c_address').value = row["ADDRESS"] || "";
+                    document.getElementById('c_8020').value = row["80-20"] || "A";
+                    document.getElementById('c_resp').value = row["Service - Responsible"] || "";
+                } else {
+                    document.getElementById('customerForm').reset();
+                    document.getElementById('c_editId').value = "";
+                }
+            }
+        }
+
+        function closeModal() { 
+            document.getElementById('entryModal').classList.remove('open'); 
+        }
+
+        async function saveData() {
+            let payload = {};
+            
+            if(currentTab === 'visits') {
+                const editId = document.getElementById('v_editId').value;
+                payload = {
+                    _id: editId || 'v' + Date.now(),
+                    "Customer Code": document.getElementById('v_code').value,
+                    "COMPANY": document.getElementById('v_company').value,
+                    "COUNTRY": document.getElementById('v_country').value,
+                    "PLACE": document.getElementById('v_place').value,
+                    "ADDRESS": document.getElementById('v_address').value,
+                    "Visit Plan": document.getElementById('v_plan').value,
+                    "Visit Date": document.getElementById('v_date').value,
+                    "Status": document.getElementById('v_status').value,
+                    "Opportunities Values I Euro": parseFloat(document.getElementById('v_val').value) || 0,
+                    "Remarks": document.getElementById('v_remarks').value
+                };
+
+                if(editId) {
+                    const idx = visits.findIndex(v => v._id === editId);
+                    if(idx !== -1) visits[idx] = payload;
+                } else {
+                    visits.push(payload);
+                }
+            } else {
+                const editId = document.getElementById('c_editId').value;
+                payload = {
+                    _id: editId || 'c' + Date.now(),
+                    "Customer Code": document.getElementById('c_code').value,
+                    "COMPANY": document.getElementById('c_company').value,
+                    "COUNTRY": document.getElementById('c_country').value,
+                    "ADDRESS": document.getElementById('c_address').value,
+                    "80-20": document.getElementById('c_8020').value,
+                    "Service - Responsible": document.getElementById('c_resp').value
+                };
+
+                if(editId) {
+                    const idx = customers.findIndex(c => c._id === editId);
+                    if(idx !== -1) customers[idx] = payload;
+                } else {
+                    customers.push(payload);
+                }
+            }
+
+            await saveToStorage();
+            closeModal();
+            switchTab(currentTab);
+        }
+
+        function editEntry(id) {
+            const data = currentTab === 'visits' 
+                ? visits.find(v => v._id === id) 
+                : customers.find(c => c._id === id);
+            openModal(data);
+        }
+
+        async function deleteEntry(id) {
+            if(!confirm("Delete this entry?")) return;
+            
+            if(currentTab === 'visits') {
+                visits = visits.filter(v => v._id !== id);
+            } else {
+                customers = customers.filter(c => c._id !== id);
+            }
+            
+            await saveToStorage();
+            switchTab(currentTab);
+        }
+
+        function filterTable(q) {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            q = q.toLowerCase();
+            rows.forEach(r => { 
+                r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; 
+            });
+        }
+
+        // --- IMPORT/EXPORT ---
+        async function handleImport(input) {
+            const file = input.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const workbook = XLSX.read(e.target.result, {type: 'array'});
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    
+                    if(currentTab === 'visits') {
+                        json.forEach(row => {
+                            row._id = 'v' + Date.now() + Math.random();
+                            visits.push(row);
+                        });
+                    } else {
+                        json.forEach(row => {
+                            row._id = 'c' + Date.now() + Math.random();
+                            customers.push(row);
+                        });
+                    }
+                    
+                    await saveToStorage();
+                    alert(`Imported ${json.length} records`);
+                    switchTab(currentTab);
+                } catch (error) {
+                    alert('Import failed: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            input.value = '';
+        }
+
+        function exportData() {
+            const data = currentTab === 'visits' ? visits : customers;
+            if(!data.length) return alert("No data to export");
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, `export_${currentTab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+    </script>
+</body>
+</html>
