@@ -2,12 +2,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security & Middleware
+// Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -20,10 +21,20 @@ mongoose.connect(MONGO_URI)
   .catch(err => console.error("DB Error:", err));
 
 // --- SCHEMAS ---
+
+// 1. User Schema (For Login)
+const userSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true }
+});
+const User = mongoose.model('User', userSchema);
+
+// 2. Visit Schema
 const visitSchema = new mongoose.Schema({
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Link visits to user
     "Sl.No": Number,
-    "Customer Code": { type: String, required: true },
-    "COMPANY": { type: String, required: true },
+    "Customer Code": String,
+    "COMPANY": String,
     "COUNTRY": String,
     "PLACE": String,
     "Customer Classification": String,
@@ -41,10 +52,12 @@ const visitSchema = new mongoose.Schema({
     "Audit Report": String
 }, { timestamps: true });
 
+// 3. Customer Schema
 const customerSchema = new mongoose.Schema({
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Link customers to user
     "Sl.No": Number,
-    "Customer Code": { type: String, required: true, unique: true }, // Ensure unique codes
-    "COMPANY": { type: String, required: true },
+    "Customer Code": String,
+    "COMPANY": String,
     "ADDRESS": String,
     "COUNTRY": String,
     "Service - Responsible": String,
@@ -58,34 +71,53 @@ const customerSchema = new mongoose.Schema({
 const Visit = mongoose.model('Visit', visitSchema);
 const Customer = mongoose.model('Customer', customerSchema);
 
-// --- ROUTES ---
+// --- AUTH ROUTES ---
 
-// GET Data
+app.post('/api/register', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await User.create({ email, password: hashedPassword });
+        res.json({ success: true, user: { id: user._id, email: user.email } });
+    } catch (e) {
+        res.status(400).json({ error: "Email already exists or invalid data" });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user) return res.status(400).json({ error: "User not found" });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ error: "Invalid password" });
+
+        // In a real app, send JWT here. For this demo, we send back user ID.
+        res.json({ success: true, user: { id: user._id, email: user.email } });
+    } catch (e) {
+        res.status(500).json({ error: "Login error" });
+    }
+});
+
+// --- DATA ROUTES (Protected by User ID) ---
+
+// Helper to get user data based on stored ID
 app.get('/api/visits', async (req, res) => {
-    const data = await Visit.find().sort({ createdAt: -1 });
+    const userId = req.query.userId; // Frontend sends this
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const data = await Visit.find({ createdBy: userId }).sort({ createdAt: -1 });
     res.json(data);
 });
 
 app.get('/api/customers', async (req, res) => {
-    const data = await Customer.find().sort({ createdAt: -1 });
+    const userId = req.query.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const data = await Customer.find({ createdBy: userId }).sort({ createdAt: -1 });
     res.json(data);
 });
 
-// NEW: Search Customer for Auto-Fill
-app.get('/api/customers/search', async (req, res) => {
-    const { q } = req.query;
-    if (!q) return res.json([]);
-    // Search by Customer Code or Company
-    const data = await Customer.find({
-        $or: [
-            { "Customer Code": { $regex: q, $options: 'i' } },
-            { "COMPANY": { $regex: q, $options: 'i' } }
-        ]
-    }).limit(10);
-    res.json(data);
-});
-
-// SAVE Data
+// SAVE
 app.post('/api/visits', async (req, res) => {
     try {
         const item = req.body;
@@ -102,12 +134,6 @@ app.post('/api/visits', async (req, res) => {
 app.post('/api/customers', async (req, res) => {
     try {
         const item = req.body;
-        // Check for duplicates manually to give clean error
-        if(!item._id) {
-            const existing = await Customer.findOne({ "Customer Code": item["Customer Code"] });
-            if(existing) return res.status(400).json({ error: "Customer Code already exists" });
-        }
-
         if (item._id) {
             await Customer.findByIdAndUpdate(item._id, item);
         } else {
@@ -128,35 +154,23 @@ app.delete('/api/customers/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// BULK IMPORT (Robust)
+// IMPORT
 app.post('/api/import', async (req, res) => {
     try {
-        const { type, data } = req.body;
-        if (!Array.isArray(data)) throw new Error("Data is not an array");
+        const { type, data, userId } = req.body;
+        
+        // Attach userId to all imported items
+        const cleanData = data.map(item => ({ ...item, createdBy: userId }));
 
-        // Clean data: remove _ids, ensure basic structure
-        const cleanData = data.map(d => {
-            const doc = { ...d };
-            delete doc._id; 
-            delete doc.createdAt;
-            delete doc.updatedAt;
-            return doc;
-        });
-
-        let result;
         if (type === 'visits') {
-            // Validate required fields before inserting
-            const valid = cleanData.filter(d => d["Customer Code"] && d["COMPANY"]);
-            result = await Visit.insertMany(valid);
+            await Visit.insertMany(cleanData);
         } else {
-            const valid = cleanData.filter(d => d["Customer Code"] && d["COMPANY"]);
-            // Use ordered: false to skip errors if duplicates exist in import
-            result = await Customer.insertMany(valid, { ordered: false }); 
+            await Customer.insertMany(cleanData);
         }
-        res.json({ success: true, count: result.length });
+        res.json({ success: true, count: cleanData.length });
     } catch(e) {
-        console.error("Import Error:", e);
-        res.status(500).json({ error: "Import failed. Check format or duplicates." });
+        console.error(e);
+        res.status(500).json({ error: "Import failed." });
     }
 });
 
