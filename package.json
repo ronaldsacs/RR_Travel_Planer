@@ -1,6 +1,6 @@
 {
-  "name": "travel-planner-json",
-  "version": "1.0.3",
+  "name": "travel-planner-ultimate",
+  "version": "1.0.4",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
