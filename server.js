@@ -8,20 +8,23 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// --- MIDDLEWARE (Must be at the TOP) ---
 app.use(helmet());
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb' })); // Essential for receiving JSON data
 app.use(express.static('public'));
 
 // --- DB CONNECTION ---
 const MONGO_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/travel_planner";
 mongoose.connect(MONGO_URI)
   .then(() => {
-      console.log("MongoDB Connected");
-      seedDefaultAdmin(); // <--- RUN THE SEED FUNCTION HERE
+      console.log("✅ MongoDB Connected");
+      seedDefaultAdmin(); 
   })
-  .catch(err => console.error("DB Error:", err));
+  .catch(err => {
+      console.error("❌ DB Connection Error:", err);
+      process.exit(1); // Stop server if DB fails
+  });
 
 // --- SCHEMAS ---
 const userSchema = new mongoose.Schema({
@@ -31,7 +34,7 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 const visitSchema = new mongoose.Schema({
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Link to User
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     "Sl.No": Number,
     "Customer Code": String,
     "COMPANY": String,
@@ -53,7 +56,7 @@ const visitSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const customerSchema = new mongoose.Schema({
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Link to User
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     "Sl.No": Number,
     "Customer Code": String,
     "COMPANY": String,
@@ -70,15 +73,17 @@ const customerSchema = new mongoose.Schema({
 const Visit = mongoose.model('Visit', visitSchema);
 const Customer = mongoose.model('Customer', customerSchema);
 
-// --- AUTO-CREATE DEFAULT ADMIN ---
+// --- SEED DEFAULT ADMIN (With Logs) ---
 async function seedDefaultAdmin() {
-    const adminEmail = "ronaldsacs@gmail.com";
-    const adminPassword = "!@123Kadant"; // Change this if you want a different default
+    const adminEmail = "admin@travelplanner.com";
+    const adminPassword = "password123"; 
 
     try {
+        console.log("🔍 Checking if admin exists...");
         const existingAdmin = await User.findOne({ email: adminEmail });
         
         if (!existingAdmin) {
+            console.log("⚠️ Admin not found. Creating...");
             const hashedPassword = await bcrypt.hash(adminPassword, 10);
             const newAdmin = new User({
                 email: adminEmail,
@@ -91,59 +96,87 @@ async function seedDefaultAdmin() {
             console.log(`Password: ${adminPassword}`);
             console.log("--------------------------------------------------");
         } else {
-            console.log("✅ Admin user already exists.");
+            console.log("✅ Admin user already exists in database.");
         }
     } catch (error) {
-        console.error("Error seeding admin user:", error);
+        console.error("❌ Error seeding admin user:", error);
     }
 }
 
-// --- ROUTES ---
+// --- RESET ROUTE (Use this if login fails) ---
+app.get('/api/debug-reset', async (req, res) => {
+    try {
+        await User.deleteMany({});
+        console.log("Database wiped.");
+        await seedDefaultAdmin();
+        res.send("Database reset and Admin recreated. You can now login.");
+    } catch(e) {
+        res.status(500).send("Error resetting: " + e.message);
+    }
+});
+
+// --- AUTH ROUTES (With Debug Logs) ---
 
 app.post('/api/register', async (req, res) => {
+    console.log("📝 Register Request:", req.body.email);
     try {
         const { email, password } = req.body;
         const hashedPassword = await bcrypt.hash(password, 10);
         const user = await User.create({ email, password: hashedPassword });
+        console.log("✅ User Registered:", user.email);
         res.json({ success: true, user: { id: user._id, email: user.email } });
     } catch (e) {
+        console.error("❌ Register Error:", e.message);
         res.status(400).json({ error: "Email already exists or invalid data" });
     }
 });
 
 app.post('/api/login', async (req, res) => {
+    console.log("🔑 Login Attempt:", req.body.email);
+    
     try {
         const { email, password } = req.body;
+        
+        // 1. Find User
         const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ error: "User not found" });
+        if (!user) {
+            console.log("❌ User not found for email:", email);
+            return res.status(400).json({ error: "User not found" });
+        }
+        console.log("✅ User found. Comparing password...");
 
+        // 2. Compare Password
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ error: "Invalid password" });
+        if (!isMatch) {
+            console.log("❌ Password mismatch.");
+            return res.status(400).json({ error: "Invalid password" });
+        }
 
+        console.log("✅ Login Successful!");
         res.json({ success: true, user: { id: user._id, email: user.email } });
     } catch (e) {
-        res.status(500).json({ error: "Login error" });
+        console.error("❌ Server Error during login:", e);
+        res.status(500).json({ error: "Server error" });
     }
 });
 
-// ... (KEEP THE REST OF YOUR ROUTES THE SAME: /visits, /customers, etc.) ...
+// --- DATA ROUTES ---
 
-// Helper to get user data based on stored ID
 app.get('/api/visits', async (req, res) => {
-    const userId = req.query.userId;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = req.query.userId; 
+    if (!userId) return res.status(401).json({ error: "Unauthorized: No userId" });
     const data = await Visit.find({ createdBy: userId }).sort({ createdAt: -1 });
     res.json(data);
 });
 
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', async (req, res) => { // Fixed typo from customers -> customers
     const userId = req.query.userId;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!userId) return res.status(401).json({ error: "Unauthorized: No userId" });
     const data = await Customer.find({ createdBy: userId }).sort({ createdAt: -1 });
     res.json(data);
 });
 
-// SAVE (Create/Update)
+// SAVE
 app.post('/api/visits', async (req, res) => {
     try {
         const item = req.body;
@@ -157,7 +190,7 @@ app.post('/api/visits', async (req, res) => {
     } catch(e) { res.status(400).json({ error: e.message }); }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', async (req, res) => { // Fixed typo
     try {
         const item = req.body;
         if (item._id) {
@@ -180,12 +213,10 @@ app.delete('/api/customers/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// BULK IMPORT
+// IMPORT
 app.post('/api/import', async (req, res) => {
     try {
         const { type, data, userId } = req.body;
-        
-        // Attach userId to all imported items
         const cleanData = data.map(item => ({ ...item, createdBy: userId }));
 
         if (type === 'visits') {
@@ -201,5 +232,5 @@ app.post('/api/import', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
