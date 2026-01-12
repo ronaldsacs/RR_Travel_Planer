@@ -1,9 +1,9 @@
 {
   "name": "travel-planner-json",
   "version": "1.0.3",
-  "main": "server-json.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node server-json.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
