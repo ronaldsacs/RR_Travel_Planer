@@ -8,17 +8,16 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
 // --- CONFIGURATION ---
-// All data will be stored in this file
 const DATA_FILE = path.join(__dirname, 'data.json');
 
-// Helper: Read Data from File
+// Helper: Read DB
 function readDB() {
     if (!fs.existsSync(DATA_FILE)) {
-        // Create default file with admin user if not exists
+        // Create default file with Admin
         const initialData = {
             users: [
                 { id: 1, email: 'admin@travelplanner.com', password: 'password123' }
@@ -33,20 +32,17 @@ function readDB() {
     return JSON.parse(data);
 }
 
-// Helper: Save Data to File
+// Helper: Write DB
 function writeDB(data) {
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
 // --- AUTH ROUTES ---
-
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
     const db = readDB();
     
-    // Simple password check (for demo purposes)
     const user = db.users.find(u => u.email === email && u.password === password);
-    
     if (user) {
         res.json({ success: true, user: { id: user.id, email: user.email } });
     } else {
@@ -54,23 +50,9 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-app.post('/api/register', (req, res) => {
-    const { email, password } = req.body;
-    const db = readDB();
-    
-    // Check if user exists
-    const exists = db.users.find(u => u.email === email);
-    if (exists) return res.status(400).json({ error: "User already exists" });
-
-    const newUser = { id: Date.now(), email, password };
-    db.users.push(newUser);
-    writeDB(db);
-    
-    res.json({ success: true, user: { id: newUser.id, email: newUser.email } });
-});
-
 // --- DATA ROUTES ---
 
+// GET: Visits & Customers
 app.get('/api/visits', (req, res) => {
     const db = readDB();
     const userId = req.query.userId;
@@ -85,17 +67,33 @@ app.get('/api/customers', (req, res) => {
     res.json(userCustomers);
 });
 
-// SAVE
+// GET: Dashboard Data (KPIs)
+app.get('/api/kpi', (req, res) => {
+    const db = readDB();
+    const userId = req.query.userId;
+    
+    const userVisits = db.visits.filter(v => v.createdBy == userId);
+    
+    const totalVisits = userVisits.length;
+    const totalOpp = userVisits.reduce((sum, v) => sum + (parseFloat(v["Opportunities Values I Euro"]) || 0), 0);
+    const totalOrder = userVisits.reduce((sum, v) => sum + (parseFloat(v["Order Value"]) || 0), 0);
+    
+    res.json({
+        totalVisits,
+        totalOpp,
+        totalOrder
+    });
+});
+
+// SAVE (Visits & Customers)
 app.post('/api/visits', (req, res) => {
     const db = readDB();
     const item = req.body;
     
     if (item._id) {
-        // Update
         const index = db.visits.findIndex(v => v._id == item._id);
         if (index !== -1) db.visits[index] = { ...item, updatedAt: Date.now() };
     } else {
-        // Create
         delete item._id;
         db.visits.push({ ...item, _id: Date.now(), createdAt: Date.now() });
     }
@@ -138,10 +136,9 @@ app.post('/api/import', (req, res) => {
     const db = readDB();
     const { type, data, userId } = req.body;
     
-    // Attach user ID and IDs to imported items
     const cleanData = data.map(item => ({
         ...item, 
-        _id: Date.now() + Math.random(), // Generate unique ID
+        _id: Date.now() + Math.random(), 
         createdBy: userId, 
         createdAt: Date.now()
     }));
@@ -157,5 +154,4 @@ app.post('/api/import', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Database file: ${DATA_FILE}`);
 });
