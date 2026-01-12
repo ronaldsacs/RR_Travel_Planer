@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Travel Planner - Ultimate Edition</title>
+    <title>Travel Planner - Selectable Dropdown</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <style>
@@ -16,7 +16,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-        /* --- LOGIN --- */
+        /* LOGIN */
         #auth-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(135deg, var(--primary) 0%, #0f172a 100%);
@@ -30,7 +30,7 @@
         .auth-input:focus { border-color: var(--primary); }
         .btn-block { width: 100%; padding: 0.8rem; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
 
-        /* --- MAIN APP --- */
+        /* MAIN APP */
         #app-screen { display: none; flex: 1; height: 100vh; }
         
         aside { width: 260px; background: var(--bg-card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 1.5rem; z-index: 10; }
@@ -68,26 +68,7 @@
         .badge-planned { background: #eff6ff; color: var(--primary); }
         .badge-completed { background: #ecfdf5; color: var(--success); }
 
-        .action-icon { cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 6px; transition: 0.2s; font-size: 1.1rem; }
-        .action-icon:hover { color: var(--primary); }
-        .action-icon.delete:hover { color: var(--danger); }
-
-        /* Custom Dropdown */
-        .custom-select-wrapper { position: relative; width: 100%; }
-        .custom-select-input { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 0.9rem; background: white; }
-        .custom-select-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
-        .custom-dropdown {
-            position: absolute; top: 100%; left: 0; width: 100%; max-height: 200px;
-            background: white; border: 1px solid var(--border); border-radius: 6px;
-            overflow-y: auto; z-index: 50; display: none; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-        }
-        .custom-dropdown.open { display: block; }
-        .dropdown-item { padding: 0.6rem; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; }
-        .dropdown-item:hover { background: var(--primary-light); color: var(--primary); }
-        .dropdown-item strong { display: block; color: var(--text-main); }
-        .dropdown-item span { font-size: 0.8rem; color: var(--secondary); }
-
-        /* Modal */
+        /* Modal & Select */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 50; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal-overlay.open { display: flex; }
         .modal { background: white; width: 95%; max-width: 900px; max-height: 90vh; border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
@@ -98,9 +79,24 @@
         .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
         .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--secondary); }
         .form-group input, .form-group select, .form-group textarea { padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 0.9rem; }
-        .form-group input:focus { border-color: var(--primary); }
-        
+        .form-group input:focus, .form-group select:focus { border-color: var(--primary); }
+
         #visitForm { display: block; } #customerForm { display: none; }
+        .full-width { grid-column: span 2; }
+
+        /* Standard Select Styling */
+        select.custom-select { 
+            width: 100%; 
+            padding: 0.6rem; 
+            border: 1px solid var(--border); 
+            border-radius: 6px; 
+            background-color: white; 
+            appearance: none; /* remove default arrow */ 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+        }
+        select.custom-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+        
     </style>
 </head>
 <body>
@@ -171,26 +167,29 @@
         <div class="modal">
             <div style="padding:1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
                 <h3 id="modalTitle">Add Entry</h3>
-                <i class="ph ph-x action-icon" onclick="closeModal()" style="font-size:1.5rem;"></i>
+                <i class="ph ph-x" onclick="closeModal()" style="cursor:pointer; font-size:1.5rem;"></i>
             </div>
             <div class="modal-body">
                 
-                <!-- VISIT FORM -->
+                <!-- VISIT FORM (With SELECTABLE DROPDOWN) -->
                 <form id="visitForm">
                     <input type="hidden" id="v_editId">
                     <div class="form-grid">
                         
-                        <!-- DYNAMIC CUSTOMER SEARCH -->
-                        <div class="form-group custom-select-wrapper">
-                            <label>Customer Code</label>
-                            <input type="text" id="v_code" class="custom-select-input" placeholder="Type to search customers..." oninput="filterDropdown(this.value)" onfocus="showDropdown()">
-                            <ul id="customerDropdown" class="custom-dropdown">
-                                <!-- Populated by JS -->
-                            </ul>
+                        <!-- THE FIX: Select Customer Dropdown -->
+                        <div class="form-group">
+                            <label>Select Customer</label>
+                            <select id="customer_select" class="custom-select" onchange="onCustomerSelectChange(this)">
+                                <option value="" disabled selected>-- Select Customer --</option>
+                                <!-- Options populated by JS -->
+                            </select>
                         </div>
-                        
-                        <div class="form-group"><label>COMPANY</label><input type="text" id="v_company" required></div>
+
+                        <!-- Auto-filled Fields -->
+                        <div class="form-group"><label>Customer Code</label><input type="text" id="v_code" readonly style="background: #f1f5f9; cursor: not-allowed;"></div>
+                        <div class="form-group"><label>COMPANY</label><input type="text" id="v_company"></div>
                         <div class="form-group"><label>COUNTRY</label><input type="text" id="v_country"></div>
+                        <div class="form-group"><label>ADDRESS</label><input type="text" id="v_address"></div>
                         <div class="form-group"><label>PLACE</label><input type="text" id="v_place"></div>
                         <div class="form-group"><label>Visit Plan</label><input type="text" id="v_plan"></div>
                         <div class="form-group"><label>Visit Date</label><input type="date" id="v_date"></div>
@@ -269,16 +268,17 @@
 
         // --- DATA LOAD ---
         async function loadData() {
-            // 1. Fetch Customers (Required for dropdown)
+            // 1. Always Load Customers (Required for Dropdown)
             const cRes = await fetch(`${API_URL}/customers?userId=${currentUser.id}`);
             customers = await cRes.json();
             
-            // 2. Fetch Visits (if needed)
+            // 2. Load Visits if needed
             if (currentTab === 'visits') {
                 const vRes = await fetch(`${API_URL}/visits?userId=${currentUser.id}`);
                 visits = await vRes.json();
             }
-            // 3. Fetch KPI (if needed)
+            
+            // 3. Update Dashboard if needed
             if (currentTab === 'dashboard') {
                 const kpiRes = await fetch(`${API_URL}/kpi?userId=${currentUser.id}`);
                 const kpi = await kpiRes.json();
@@ -286,7 +286,7 @@
                 document.getElementById('stat-opp').innerText = '€' + kpi.totalOpp.toLocaleString();
                 document.getElementById('stat-order').innerText = '€' + kpi.totalOrder.toLocaleString();
             }
-            
+
             renderView();
         }
 
@@ -297,77 +297,51 @@
             if(tab==='customers') document.querySelectorAll('nav button')[1].classList.add('active');
             if(tab==='dashboard') document.querySelectorAll('nav button')[2].classList.add('active');
 
-            // Toggle Views
-            const isDashboard = tab === 'dashboard';
-            document.getElementById('view-dashboard').style.display = isDashboard ? 'block' : 'none';
-            document.getElementById('view-data').style.display = isDashboard ? 'none' : 'block';
-            
+            document.getElementById('view-dashboard').style.display = tab === 'dashboard' ? 'block' : 'none';
+            document.getElementById('view-data').style.display = tab === 'dashboard' ? 'none' : 'block';
             document.getElementById('page-title').innerText = tab === 'visits' ? 'Visit Planner' : tab === 'customers' ? 'Customer Master' : 'Analytics / KPI';
             
-            loadData(); // Reload data for the tab
+            loadData();
         }
 
-        // --- DYNAMIC DROPDOWN LOGIC (THE FIX) ---
-        function showDropdown() {
-            // Ensure we have customers list
-            if(customers.length === 0) return; 
-            document.getElementById('customerDropdown').classList.add('open');
-        }
-
-        // Hide when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.custom-select-wrapper')) {
-                document.getElementById('customerDropdown').classList.remove('open');
-            }
-        });
-
-        function filterDropdown(query) {
-            const list = document.getElementById('customerDropdown');
-            list.innerHTML = '';
+        // --- DROPDOWN LOGIC (THE FIX) ---
+        function renderCustomerDropdown() {
+            const select = document.getElementById('customer_select');
+            select.innerHTML = '<option value="" disabled selected>-- Select Customer --</option>';
             
-            if (!query) {
-                // Show empty placeholder or nothing
-                return; 
-            }
-
-            const q = query.toLowerCase();
-            // Search Code OR Company
-            const filtered = customers.filter(c => 
-                c["Customer Code"].toLowerCase().includes(q) || 
-                c["COMPANY"].toLowerCase().includes(q)
-            );
-
-            if (filtered.length === 0) {
-                const li = document.createElement('li');
-                li.className = 'dropdown-item';
-                li.style.color = '#999';
-                li.innerText = 'No customers found';
-                list.appendChild(li);
+            if(customers.length === 0) {
+                const opt = document.createElement('option');
+                opt.innerText = "No customers in database";
+                select.appendChild(opt);
                 return;
             }
 
-            filtered.forEach(c => {
-                const li = document.createElement('li');
-                li.className = 'dropdown-item';
-                li.innerHTML = `<strong>${c["Customer Code"]}</strong> - ${c["COMPANY"]}`;
-                
-                // ON CLICK: Fill fields
-                li.onclick = () => {
-                    selectCustomer(c);
-                };
-                
-                list.appendChild(li);
+            customers.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c._id; // Value is the ID for logic
+                // Display: "Code - Company Name"
+                opt.text = `${c["Customer Code"]} - ${c["COMPANY"]}`;
+                select.appendChild(opt);
             });
         }
 
-        function selectCustomer(customer) {
-            document.getElementById('v_code').value = customer["Customer Code"];
-            document.getElementById('v_company').value = customer["COMPANY"];
-            document.getElementById('v_country').value = customer["COUNTRY"];
-            // Optional: Map Address to Place if needed, or leave empty
-            document.getElementById('v_place').value = customer["ADDRESS"] || "";
-            
-            document.getElementById('customerDropdown').classList.remove('open');
+        function onCustomerSelectChange(selectEl) {
+            const customerId = selectEl.value;
+            if (!customerId) return;
+
+            // Find customer object from our loaded list
+            const customer = customers.find(c => c._id == customerId);
+
+            if (customer) {
+                // 1. Fill Code
+                document.getElementById('v_code').value = customer["Customer Code"];
+                // 2. Fill Company
+                document.getElementById('v_company').value = customer["COMPANY"];
+                // 3. Fill Country
+                document.getElementById('v_country').value = customer["COUNTRY"];
+                // 4. Fill Address into Place or Address field
+                document.getElementById('v_address').value = customer["ADDRESS"] || "";
+            }
         }
 
         // --- RENDER ---
@@ -389,16 +363,10 @@
                 });
                 tr += `<td>
                     <span class="action-icon" onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:5px;">✏️</span>
-                    <span class="action-icon delete" onclick="deleteEntry('${row._id}')" style="cursor:pointer; color:var(--danger);">🗑️</span>
+                    <span class="action-icon" onclick="deleteEntry('${row._id}')" style="cursor:pointer; color:var(--danger);">🗑️</span>
                 </td>`;
                 tableBody.insertAdjacentHTML('beforeend', tr);
             });
-        }
-
-        function filterTable(q) {
-            const rows = document.querySelectorAll('#dataTable tbody tr');
-            q = q.toLowerCase();
-            rows.forEach(r => { r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; });
         }
 
         // --- MODAL ---
@@ -407,11 +375,18 @@
             if(currentTab === 'visits') {
                 document.getElementById('visitForm').style.display = 'block';
                 document.getElementById('customerForm').style.display = 'none';
+                
+                // Populate Dropdown based on available customers
+                renderCustomerDropdown();
+
                 if(row) {
+                    // If editing, set select to current customer
+                    document.getElementById('customer_select').value = row["Customer Code"] ? customers.find(c => c._id == row.createdBy)._id : "";
                     document.getElementById('v_editId').value = row._id;
                     document.getElementById('v_code').value = row["Customer Code"];
                     document.getElementById('v_company').value = row["COMPANY"];
                     document.getElementById('v_country').value = row["COUNTRY"];
+                    document.getElementById('v_address').value = row["ADDRESS"] || "";
                     document.getElementById('v_place').value = row["PLACE"];
                     document.getElementById('v_plan').value = row["Visit Plan"];
                     document.getElementById('v_date').value = row["Visit Date"];
@@ -421,7 +396,7 @@
                 } else {
                     document.getElementById('visitForm').reset();
                     document.getElementById('v_editId').value = "";
-                    document.getElementById('customerDropdown').classList.remove('open');
+                    document.getElementById('customer_select').value = "";
                 }
             } else {
                 document.getElementById('visitForm').style.display = 'none';
@@ -443,12 +418,12 @@
 
         function closeModal() { document.getElementById('entryModal').classList.remove('open'); }
 
-        // --- CRUD ---
         async function saveData() {
             let payload = {};
             const endpoint = currentTab === 'visits' ? `${API_URL}/visits` : `${API_URL}/customers`;
             
             if(currentTab === 'visits') {
+                // If select is used, we can rely on filled inputs, otherwise use inputs
                 payload = {
                     _id: document.getElementById('v_editId').value,
                     createdBy: currentUser.id,
@@ -456,6 +431,7 @@
                     "COMPANY": document.getElementById('v_company').value,
                     "COUNTRY": document.getElementById('v_country').value,
                     "PLACE": document.getElementById('v_place').value,
+                    "ADDRESS": document.getElementById('v_address').value, // Use the address field filled from customer
                     "Visit Plan": document.getElementById('v_plan').value,
                     "Visit Date": document.getElementById('v_date').value,
                     "Status": document.getElementById('v_status').value,
@@ -492,6 +468,12 @@
             loadData();
         }
 
+        function filterTable(q) {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            q = q.toLowerCase();
+            rows.forEach(r => { r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; });
+        }
+
         // --- IMPORT/EXPORT ---
         async function handleImport(input) {
             const file = input.files[0];
@@ -500,6 +482,7 @@
             reader.onload = async (e) => {
                 const workbook = XLSX.read(e.target.result, {type: 'array'});
                 const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                
                 await fetch(`${API_URL}/import`, {
                     method: 'POST',
                     headers: {'Content-Type':'application/json'},
