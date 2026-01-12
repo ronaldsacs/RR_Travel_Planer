@@ -370,20 +370,9 @@
         }
 
         async function initializeDemoData() {
-            customers = [
-                { _id: 'c1', "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "ADDRESS": "Berlin Street 123", "80-20": "A", "Service - Responsible": "John Doe" },
-                { _id: 'c2', "Customer Code": "CUST002", "COMPANY": "Global Industries Ltd", "COUNTRY": "UK", "ADDRESS": "London Road 456", "80-20": "A", "Service - Responsible": "Jane Smith" },
-                { _id: 'c3', "Customer Code": "CUST003", "COMPANY": "Innovate Corp", "COUNTRY": "France", "ADDRESS": "Paris Avenue 789", "80-20": "B", "Service - Responsible": "Mike Johnson" },
-                { _id: 'c4', "Customer Code": "CUST004", "COMPANY": "Digital Ventures", "COUNTRY": "Spain", "ADDRESS": "Madrid Plaza 321", "80-20": "B", "Service - Responsible": "Sarah Wilson" },
-                { _id: 'c5', "Customer Code": "CUST005", "COMPANY": "Future Systems", "COUNTRY": "Italy", "ADDRESS": "Rome Via 654", "80-20": "C", "Service - Responsible": "Tom Brown" }
-            ];
-
-            visits = [
-                { _id: 'v1', SlNo: 1, "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "PLACE": "Berlin", "Customer Classification": "A", "STREET": "Berlin Street 123", "Visit Plan": "Week 3", "Visit Date From": "2025-01-15", "Visit Date To": "2025-01-17", "No of Days": 3, "Travel": "Flight", "Remarks": "Successful meeting", "Opportunities": "New product line", "Opportunities Values I Euro": 50000, "Action Plan": "Follow up in Q2", "Status": "Completed", "PO Order Value": 25000, "Audit Report": "All requirements met" },
-                { _id: 'v2', SlNo: 2, "Customer Code": "CUST002", "COMPANY": "Global Industries Ltd", "COUNTRY": "UK", "PLACE": "London", "Customer Classification": "A", "STREET": "London Road 456", "Visit Plan": "Week 4", "Visit Date From": "2025-01-20", "Visit Date To": "2025-01-22", "No of Days": 3, "Travel": "Train", "Remarks": "New product interest", "Opportunities": "Contract renewal", "Opportunities Values I Euro": 75000, "Action Plan": "Prepare proposal", "Status": "Planned", "PO Order Value": 0, "Audit Report": "" },
-                { _id: 'v3', SlNo: 3, "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "PLACE": "Munich", "Customer Classification": "A", "STREET": "Munich Str 999", "Visit Plan": "Week 6", "Visit Date From": "2025-02-05", "Visit Date To": "2025-02-07", "No of Days": 3, "Travel": "Flight", "Remarks": "Major deal pending", "Opportunities": "Enterprise upgrade", "Opportunities Values I Euro": 100000, "Action Plan": "Contract negotiation", "Status": "Planned", "PO Order Value": 0, "Audit Report": "" }
-            ];
-
+            // Start with empty data - no default entries
+            customers = [];
+            visits = [];
             await saveToStorage();
         }
 
