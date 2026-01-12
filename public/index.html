@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Planner - DB Connected</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root { --primary: #2563eb; --bg-body: #f8fafc; --bg-card: #ffffff; --text-main: #1e293b; --border: #e2e8f0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); display: flex; height: 100vh; }
+        
+        /* Sidebar & Main Layout */
+        aside { width: 250px; background: var(--bg-card); border-right: 1px solid var(--border); padding: 1.5rem; }
+        .brand { font-weight: 800; color: var(--primary); margin-bottom: 2rem; display: flex; align-items: center; gap: 0.5rem; }
+        nav button { background: none; border: none; width: 100%; text-align: left; padding: 0.75rem; margin-bottom: 0.5rem; cursor: pointer; color: #64748b; border-radius: 8px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+        nav button:hover, nav button.active { background: #eff6ff; color: var(--primary); }
+        
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        header { background: white; border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; font-size: 0.9rem; font-weight: 600; display: flex; gap: 0.5rem; align-items: center; }
+        .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .content-scroll { flex: 1; overflow-y: auto; padding: 2rem; }
+
+        /* Table */
+        .table-container { background: white; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+        .table-controls { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: #f8fafc; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+        tr:hover { background: #f8fafc; }
+        
+        .status-badge { padding: 0.25rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .badge-planned { background: #eff6ff; color: var(--primary); }
+        .badge-completed { background: #ecfdf5; color: #10b981; }
+
+        .action-icon { cursor: pointer; color: #64748b; padding: 4px; }
+        .action-icon:hover { color: var(--primary); }
+
+        /* Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: white; width: 90%; max-width: 800px; max-height: 90vh; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-body { padding: 1.5rem; overflow-y: auto; }
+        .modal-footer { padding: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: #64748b; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; }
+
+        #visitForm { display: block; }
+        #customerForm { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside>
+        <div class="brand"><i class="ph ph-airplane-tilt"></i> Travel Planner</div>
+        <nav>
+            <button class="active" onclick="switchTab('visits')"><i class="ph ph-calendar-check"></i> Visit Planner</button>
+            <button onclick="switchTab('customers')"><i class="ph ph-users-three"></i> Customer Master</button>
+        </nav>
+    </aside>
+
+    <!-- Main -->
+    <main>
+        <header>
+            <h2 id="pageTitle">Visit Planner</h2>
+            <div style="display: flex; gap: 10px;">
+                <input type="file" id="excelInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleFileImport(this)">
+                <button class="btn" onclick="document.getElementById('excelInput').click()"><i class="ph ph-upload-simple"></i> Import Excel</button>
+                <button class="btn btn-primary" onclick="openModal()"><i class="ph ph-plus"></i> Add New</button>
+            </div>
+        </header>
+
+        <div class="content-scroll">
+            <div class="table-container">
+                <div class="table-controls">
+                    <input type="text" placeholder="Search..." style="padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;" onkeyup="filterTable(this.value)">
+                </div>
+                <div style="overflow-x: auto;">
+                    <table id="dataTable">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="entryModal">
+        <div class="modal">
+            <div style="padding:1.5rem; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between;">
+                <h3 id="modalTitle">Add Entry</h3>
+                <i class="ph ph-x action-icon" onclick="closeModal()"></i>
+            </div>
+            <div class="modal-body">
+                
+                <!-- VISIT FORM -->
+                <form id="visitForm">
+                    <input type="hidden" id="editId">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Customer Code</label><input type="text" id="v_code" required></div>
+                        <div class="form-group"><label>COMPANY</label><input type="text" id="v_company" required></div>
+                        <div class="form-group"><label>COUNTRY</label><input type="text" id="v_country"></div>
+                        <div class="form-group"><label>PLACE</label><input type="text" id="v_place"></div>
+                        <div class="form-group"><label>Visit Plan</label><input type="text" id="v_plan"></div>
+                        <div class="form-group"><label>Visit Date</label><input type="date" id="v_date"></div>
+                        <div class="form-group"><label>Status</label>
+                            <select id="v_status">
+                                <option>Planned</option><option>Completed</option><option>Pending</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Opp. Value (€)</label><input type="number" id="v_val"></div>
+                    </div>
+                </form>
+
+                <!-- CUSTOMER FORM -->
+                <form id="customerForm">
+                    <input type="hidden" id="c_editId">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Customer Code</label><input type="text" id="c_code" required></div>
+                        <div class="form-group"><label>COMPANY</label><input type="text" id="c_company" required></div>
+                        <div class="form-group"><label>COUNTRY</label><input type="text" id="c_country"></div>
+                        <div class="form-group"><label>ADDRESS</label><input type="text" id="c_address"></div>
+                        <div class="form-group"><label>80-20</label>
+                            <select id="c_8020"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+                        </div>
+                        <div class="form-group"><label>Service - Responsible</label><input type="text" id="c_resp"></div>
+                    </div>
+                </form>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveData()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // In production on Render, this will be the Render URL (e.g., https://myapp.onrender.com)
+        const API_URL = window.location.origin + '/api'; 
+        let currentTab = 'visits';
+        let visits = [];
+        let customers = [];
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => loadData());
+
+        // --- API FUNCTIONS ---
+        async function loadData() {
+            const endpoint = currentTab === 'visits' ? `${API_URL}/visits` : `${API_URL}/customers`;
+            try {
+                const res = await fetch(endpoint);
+                const data = await res.json();
+                if (currentTab === 'visits') visits = data; else customers = data;
+                renderTable();
+            } catch (err) { console.error("Failed to load data", err); }
+        }
+
+        async function saveToDB(item) {
+            const endpoint = currentTab === 'visits' ? `${API_URL}/visits` : `${API_URL}/customers`;
+            await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            loadData();
+        }
+
+        async function deleteFromDB(id) {
+            if(!confirm("Delete?")) return;
+            const endpoint = currentTab === 'visits' ? `${API_URL}/visits/${id}` : `${API_URL}/customers/${id}`;
+            await fetch(endpoint, { method: 'DELETE' });
+            loadData();
+        }
+
+        async function importToDB(data) {
+            await fetch(`${API_URL}/import`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: currentTab, data: data })
+            });
+            loadData();
+            alert("Import Complete");
+        }
+
+        // --- UI LOGIC ---
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            if(tab==='visits') document.querySelectorAll('nav button')[0].classList.add('active');
+            else document.querySelectorAll('nav button')[1].classList.add('active');
+            document.getElementById('pageTitle').innerText = tab === 'visits' ? "Visit Planner" : "Customer Master";
+            loadData();
+        }
+
+        function renderTable() {
+            const tableHead = document.querySelector('#dataTable thead');
+            const tableBody = document.querySelector('#dataTable tbody');
+            const data = currentTab === 'visits' ? visits : customers;
+            
+            // Determine headers based on data
+            const headers = data.length > 0 ? Object.keys(data[0]) : [];
+            
+            tableHead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}<th>Actions</th></tr>`;
+            tableBody.innerHTML = '';
+
+            data.forEach(row => {
+                let tr = `<tr>`;
+                headers.forEach(h => {
+                    let val = row[h];
+                    if(h === 'Status') val = `<span class="status-badge badge-${val.toLowerCase()}">${val}</span>`;
+                    tr += `<td>${val || ''}</td>`;
+                });
+                tr += `<td>
+                    <span class="action-icon" onclick='editEntry(${JSON.stringify(row)})'><i class="ph ph-pencil-simple"></i></span>
+                    <span class="action-icon" onclick="deleteFromDB('${row._id}')"><i class="ph ph-trash"></i></span>
+                </td></tr>`;
+                tableBody.insertAdjacentHTML('beforeend', tr);
+            });
+        }
+
+        function openModal(row = null) {
+            document.getElementById('entryModal').classList.add('open');
+            if(currentTab === 'visits') {
+                document.getElementById('visitForm').style.display = 'block';
+                document.getElementById('customerForm').style.display = 'none';
+                if(row) {
+                    document.getElementById('editId').value = row._id;
+                    document.getElementById('v_code').value = row["Customer Code"];
+                    document.getElementById('v_company').value = row["COMPANY"];
+                    document.getElementById('v_country').value = row["COUNTRY"];
+                    document.getElementById('v_place').value = row["PLACE"];
+                    document.getElementById('v_plan').value = row["Visit Plan"];
+                    document.getElementById('v_date').value = row["Visit Date"];
+                    document.getElementById('v_status').value = row["Status"];
+                    document.getElementById('v_val').value = row["Opportunities Values I Euro"];
+                } else {
+                    document.getElementById('visitForm').reset();
+                    document.getElementById('editId').value = "";
+                }
+            } else {
+                document.getElementById('visitForm').style.display = 'none';
+                document.getElementById('customerForm').style.display = 'block';
+                if(row) {
+                    document.getElementById('c_editId').value = row._id;
+                    document.getElementById('c_code').value = row["Customer Code"];
+                    document.getElementById('c_company').value = row["COMPANY"];
+                    document.getElementById('c_country').value = row["COUNTRY"];
+                    document.getElementById('c_address').value = row["ADDRESS"];
+                    document.getElementById('c_8020').value = row["80-20"];
+                    document.getElementById('c_resp').value = row["Service - Responsible"];
+                } else {
+                    document.getElementById('customerForm').reset();
+                    document.getElementById('c_editId').value = "";
+                }
+            }
+        }
+
+        function closeModal() { document.getElementById('entryModal').classList.remove('open'); }
+        function editEntry(row) { openModal(row); }
+
+        function saveData() {
+            let item = {};
+            if(currentTab === 'visits') {
+                item = {
+                    _id: document.getElementById('editId').value || new mongoose.Types.ObjectId(),
+                    "Customer Code": document.getElementById('v_code').value,
+                    "COMPANY": document.getElementById('v_company').value,
+                    "COUNTRY": document.getElementById('v_country').value,
+                    "PLACE": document.getElementById('v_place').value,
+                    "Visit Plan": document.getElementById('v_plan').value,
+                    "Visit Date": document.getElementById('v_date').value,
+                    "Status": document.getElementById('v_status').value,
+                    "Opportunities Values I Euro": document.getElementById('v_val').value
+                };
+            } else {
+                item = {
+                    _id: document.getElementById('c_editId').value || new mongoose.Types.ObjectId(),
+                    "Customer Code": document.getElementById('c_code').value,
+                    "COMPANY": document.getElementById('c_company').value,
+                    "COUNTRY": document.getElementById('c_country').value,
+                    "ADDRESS": document.getElementById('c_address').value,
+                    "80-20": document.getElementById('c_8020').value,
+                    "Service - Responsible": document.getElementById('c_resp').value
+                };
+            }
+            saveToDB(item);
+            closeModal();
+        }
+
+        function filterTable(query) {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            query = query.toLowerCase();
+            rows.forEach(r => {
+                r.style.display = r.innerText.toLowerCase().includes(query) ? '' : 'none';
+            });
+        }
+
+        // --- EXCEL IMPORT (FIXED) ---
+        function handleFileImport(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            
+            // CRITICAL FIX: Check file type to decide how to read it
+            if (file.name.endsWith('.csv')) {
+                reader.readAsText(file); // Text for CSV
+            } else {
+                reader.readAsArrayBuffer(file); // Binary for Excel (.xlsx, .xls)
+            }
+
+            reader.onload = function(e) {
+                let data = [];
+                
+                try {
+                    if (file.name.endsWith('.csv')) {
+                        const workbook = XLSX.read(e.target.result, { type: 'string' });
+                        data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    } else {
+                        const workbook = XLSX.read(e.target.result, { type: 'array' });
+                        data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    }
+
+                    if (data.length > 0) {
+                        importToDB(data);
+                    }
+                } catch (err) {
+                    alert("Error reading file: " + err.message);
+                }
+            };
+            input.value = '';
+        }
+    </script>
+</body>
+</html>
