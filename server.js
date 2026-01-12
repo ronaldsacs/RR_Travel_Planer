@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const helmet = require('helmet'); // Security header protection
+const helmet = require('helmet');
 const path = require('path');
 
 const app = express();
@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 // Security & Middleware
 app.use(helmet());
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Increased limit for bulk imports
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
 // --- DB CONNECTION ---
@@ -19,12 +19,11 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
   .catch(err => console.error("DB Error:", err));
 
-// --- SECURE SCHEMAS (Explicit Fields) ---
-// This prevents vulnerabilities associated with arbitrary JSON keys
+// --- SCHEMAS ---
 const visitSchema = new mongoose.Schema({
     "Sl.No": Number,
-    "Customer Code": String,
-    "COMPANY": String,
+    "Customer Code": { type: String, required: true },
+    "COMPANY": { type: String, required: true },
     "COUNTRY": String,
     "PLACE": String,
     "Customer Classification": String,
@@ -44,8 +43,8 @@ const visitSchema = new mongoose.Schema({
 
 const customerSchema = new mongoose.Schema({
     "Sl.No": Number,
-    "Customer Code": String,
-    "COMPANY": String,
+    "Customer Code": { type: String, required: true, unique: true }, // Ensure unique codes
+    "COMPANY": { type: String, required: true },
     "ADDRESS": String,
     "COUNTRY": String,
     "Service - Responsible": String,
@@ -61,22 +60,32 @@ const Customer = mongoose.model('Customer', customerSchema);
 
 // --- ROUTES ---
 
-// GET Visits/Customer
+// GET Data
 app.get('/api/visits', async (req, res) => {
-    try {
-        const data = await Visit.find().sort({ createdAt: -1 });
-        res.json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    const data = await Visit.find().sort({ createdAt: -1 });
+    res.json(data);
 });
 
 app.get('/api/customers', async (req, res) => {
-    try {
-        const data = await Customer.find().sort({ createdAt: -1 });
-        res.json(data);
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    const data = await Customer.find().sort({ createdAt: -1 });
+    res.json(data);
 });
 
-// SAVE (Create or Update)
+// NEW: Search Customer for Auto-Fill
+app.get('/api/customers/search', async (req, res) => {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+    // Search by Customer Code or Company
+    const data = await Customer.find({
+        $or: [
+            { "Customer Code": { $regex: q, $options: 'i' } },
+            { "COMPANY": { $regex: q, $options: 'i' } }
+        ]
+    }).limit(10);
+    res.json(data);
+});
+
+// SAVE Data
 app.post('/api/visits', async (req, res) => {
     try {
         const item = req.body;
@@ -93,6 +102,12 @@ app.post('/api/visits', async (req, res) => {
 app.post('/api/customers', async (req, res) => {
     try {
         const item = req.body;
+        // Check for duplicates manually to give clean error
+        if(!item._id) {
+            const existing = await Customer.findOne({ "Customer Code": item["Customer Code"] });
+            if(existing) return res.status(400).json({ error: "Customer Code already exists" });
+        }
+
         if (item._id) {
             await Customer.findByIdAndUpdate(item._id, item);
         } else {
@@ -113,20 +128,35 @@ app.delete('/api/customers/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// BULK IMPORT (Server-side Insertion)
+// BULK IMPORT (Robust)
 app.post('/api/import', async (req, res) => {
     try {
         const { type, data } = req.body;
-        // We rely on the Schema to filter out malicious keys
+        if (!Array.isArray(data)) throw new Error("Data is not an array");
+
+        // Clean data: remove _ids, ensure basic structure
+        const cleanData = data.map(d => {
+            const doc = { ...d };
+            delete doc._id; 
+            delete doc.createdAt;
+            delete doc.updatedAt;
+            return doc;
+        });
+
+        let result;
         if (type === 'visits') {
-            await Visit.insertMany(data);
+            // Validate required fields before inserting
+            const valid = cleanData.filter(d => d["Customer Code"] && d["COMPANY"]);
+            result = await Visit.insertMany(valid);
         } else {
-            await Customer.insertMany(data);
+            const valid = cleanData.filter(d => d["Customer Code"] && d["COMPANY"]);
+            // Use ordered: false to skip errors if duplicates exist in import
+            result = await Customer.insertMany(valid, { ordered: false }); 
         }
-        res.json({ success: true, count: data.length });
+        res.json({ success: true, count: result.length });
     } catch(e) {
-        console.error(e);
-        res.status(500).json({ error: "Import failed. Check format." });
+        console.error("Import Error:", e);
+        res.status(500).json({ error: "Import failed. Check format or duplicates." });
     }
 });
 
