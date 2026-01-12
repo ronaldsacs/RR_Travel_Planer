@@ -325,24 +325,21 @@
             });
         }
 
-        function onCustomerSelectChange(selectEl) {
-            const customerId = selectEl.value;
-            if (!customerId) return;
+// Find this function and replace it with the updated version
+function onCustomerSelectChange(selectEl) {
+    const customerId = selectEl.value;
+    if (!customerId) return;
 
-            // Find customer object from our loaded list
-            const customer = customers.find(c => c._id == customerId);
+    const customer = customers.find(c => c._id == customerId);
 
-            if (customer) {
-                // 1. Fill Code
-                document.getElementById('v_code').value = customer["Customer Code"];
-                // 2. Fill Company
-                document.getElementById('v_company').value = customer["COMPANY"];
-                // 3. Fill Country
-                document.getElementById('v_country').value = customer["COUNTRY"];
-                // 4. Fill Address into Place or Address field
-                document.getElementById('v_address').value = customer["ADDRESS"] || "";
-            }
-        }
+    if (customer) {
+        document.getElementById('v_code').value = customer["Customer Code"] || "";
+        document.getElementById('v_company').value = customer["COMPANY"] || "";
+        document.getElementById('v_country').value = customer["COUNTRY"] || "";
+        document.getElementById('v_address').value = customer["ADDRESS"] || "";
+        document.getElementById('v_place').value = "";
+    }
+}
 
         // --- RENDER ---
         function renderView() {
