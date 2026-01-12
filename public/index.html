@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Planner - Advanced Dashboard</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb; --primary-light: #eff6ff; --primary-dark: #1e40af;
+            --secondary: #64748b; --bg-body: #f1f5f9; --bg-card: #ffffff;
+            --text-main: #0f172a; --text-muted: #64748b; --border: #e2e8f0;
+            --success: #10b981; --danger: #ef4444; --warning: #f59e0b; --radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* LOGIN */
+        #auth-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, #0f172a 100%);
+            display: flex; align-items: center; justify-content: center; z-index: 100;
+        }
+        .auth-card {
+            background: white; padding: 2.5rem; border-radius: 16px;
+            width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+        .auth-input { width: 100%; padding: 0.8rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 8px; outline: none; }
+        .auth-input:focus { border-color: var(--primary); }
+        .btn-block { width: 100%; padding: 0.8rem; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+
+        /* MAIN APP */
+        #app-screen { display: none; flex: 1; height: 100vh; }
+        
+        aside { width: 260px; background: var(--bg-card); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 1.5rem; z-index: 10; }
+        .brand { font-size: 1.25rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2.5rem; }
+        nav button { background: none; border: none; width: 100%; padding: 0.75rem 1rem; text-align: left; cursor: pointer; color: var(--text-muted); border-radius: var(--radius); display: flex; align-items: center; gap: 0.75rem; font-weight: 500; transition: 0.2s; margin-bottom: 0.5rem; }
+        nav button:hover, nav button.active { background-color: var(--primary-light); color: var(--primary); }
+        nav button.active { background-color: var(--primary); color: white; }
+
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        header { background: white; border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; height: 70px; }
+        .header-actions { display: flex; gap: 0.75rem; }
+        
+        .btn { padding: 0.55rem 1rem; border-radius: var(--radius); border: 1px solid var(--border); background: white; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+        .btn-danger { color: var(--danger); border-color: var(--border); }
+        .btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
+
+        .content-scroll { flex: 1; overflow-y: auto; padding: 2rem; }
+
+        /* Dashboard */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); display: flex; flex-direction: column; }
+        .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        .stat-title { color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+        .stat-value { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .stat-change { font-size: 0.75rem; font-weight: 600; }
+        .stat-change.positive { color: var(--success); }
+
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .chart-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); }
+        .chart-title { font-size: 1rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--text-main); }
+        .chart-container { position: relative; height: 300px; }
+
+        /* Calendar Styles */
+        .date-range { display: flex; gap: 1rem; align-items: center; }
+        .date-input-wrapper { flex: 1; }
+        
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="auth-screen">
+        <div class="auth-card">
+            <div style="font-size: 1.5rem; font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; text-align: center;">Travel Planner</div>
+            <div style="text-align: center; color: var(--secondary); margin-bottom: 2rem; font-size: 0.9rem;">Sign in to manage your schedule</div>
+            <input type="email" id="login-email" class="auth-input" placeholder="Email Address" value="demo@company.com">
+            <input type="password" id="login-password" class="auth-input" placeholder="Password" value="demo123">
+            <button class="btn-block" onclick="handleLogin()">Sign In</button>
+            <div style="text-align: center; margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">
+                Demo: demo@company.com / demo123
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP SCREEN -->
+    <div id="app-screen">
+        <!-- Sidebar -->
+        <aside>
+            <div class="brand"><i class="ph ph-airplane-tilt"></i> Travel Planner</div>
+            <nav>
+                <button onclick="switchTab('dashboard')"><i class="ph ph-chart-pie-slice"></i> Dashboard</button>
+                <button onclick="switchTab('visits')"><i class="ph ph-calendar-check"></i> Visit Planner</button>
+                <button onclick="switchTab('customers')"><i class="ph ph-users-three"></i> Customer Master</button>
+            </nav>
+        </aside>
+
+        <main>
+            <header>
+                <div style="font-size: 1.2rem; font-weight: 700;" id="page-title">Dashboard</div>
+                <div class="header-actions">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--secondary); margin-right: 1rem;" id="user-display"></span>
+                    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleImport(this)">
+                    <!-- Import button - hidden on dashboard -->
+                    <button class="btn" id="importBtn" onclick="document.getElementById('fileInput').click()" style="display: none;"><i class="ph ph-upload-simple"></i> Import</button>
+                    <!-- Export button - hidden on dashboard -->
+                    <button class="btn" id="exportBtn" onclick="exportData()" style="display: none;"><i class="ph ph-download-simple"></i> Export</button>
+                    <!-- Add button - hidden on dashboard -->
+                    <button class="btn btn-primary" id="addBtn" onclick="openModal()" style="display: none;"><i class="ph ph-plus"></i> Add New</button>
+                    <button class="btn btn-danger" onclick="logout()"><i class="ph ph-sign-out"></i></button>
+                </div>
+            </header>
+
+            <div class="content-scroll">
+                <!-- DASHBOARD VIEW -->
+                <div id="view-dashboard" style="display: block;">
+                    <!-- KPI Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Total Visits</div>
+                                    <div class="stat-value" id="stat-total">0</div>
+                                    <div class="stat-change positive" id="stat-total-change">+0% from last month</div>
+                                </div>
+                                <div class="stat-icon" style="background: var(--primary-light); color: var(--primary);">📅</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Opportunities (€)</div>
+                                    <div class="stat-value" id="stat-opp">€0</div>
+                                    <div class="stat-change positive" id="stat-opp-change">+0% pipeline</div>
+                                </div>
+                                <div class="stat-icon" style="background: #fef3c7; color: var(--warning);">💰</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Completed Visits</div>
+                                    <div class="stat-value" id="stat-completed">0</div>
+                                    <div class="stat-change positive" id="stat-completion-rate">0% completion</div>
+                                </div>
+                                <div class="stat-icon" style="background: #ecfdf5; color: var(--success);">✅</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Active Customers</div>
+                                    <div class="stat-value" id="stat-customers">0</div>
+                                    <div class="stat-change positive" id="stat-customers-change">Total in database</div>
+                                </div>
+                                <div class="stat-icon" style="background: #ede9fe; color: #7c3aed;">👥</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-title">Visit Status Distribution</div>
+                            <canvas id="statusChart" height="250"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">Monthly Visit Trend</div>
+                            <canvas id="trendChart" height="250"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-title">Top 10 Customers by Opportunities</div>
+                            <canvas id="customerChart" height="350"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">Visits by Country</div>
+                            <canvas id="countryChart" height="350"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Top Performers -->
+                    <div class="chart-card" style="margin-top: 1.5rem;">
+                        <div class="chart-title">🏆 Top Performing Customers (by Opportunity Value)</div>
+                        <div id="leaderboard"></div>
+                    </div>
+                </div>
+
+                <!-- DATA TABLE VIEW -->
+                <div id="view-data" style="display: none;">
+                    <div class="table-container">
+                        <div class="table-controls">
+                            <input type="text" placeholder="Search..." style="padding:0.5rem; border:1px solid var(--border); border-radius:6px; width:300px; outline:none;" onkeyup="filterTable(this.value)">
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table id="dataTable"><thead></thead><tbody></tbody></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL -->
+    <div class="modal-overlay" id="entryModal">
+        <div class="modal">
+            <div style="padding:1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                <h3 id="modalTitle">Add Entry</h3>
+                <i class="ph ph-x" onclick="closeModal()" style="cursor:pointer; font-size:1.5rem;"></i>
+            </div>
+            <div class="modal-body">
+                
+                <!-- VISIT FORM -->
+                <form id="visitForm">
+                    <input type="hidden" id="v_editId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Select Customer *</label>
+                            <select id="customer_select" class="custom-select" onchange="onCustomerSelectChange(this)" required>
+                                <option value="" disabled selected>-- Select Customer --</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Customer Code</label><input type="text" id="v_code" readonly style="background: #f1f5f9; cursor: not-allowed;"></div>
+                        
+                        <div class="form-group"><label>COMPANY *</label><input type="text" id="v_company" required></div>
+                        <div class="form-group"><label>COUNTRY *</label><input type="text" id="v_country" required></div>
+                        
+                        <div class="form-group"><label>PLACE *</label><input type="text" id="v_place" required></div>
+                        <div class="form-group">
+                            <label>Customer Classification *</label>
+                            <select id="v_classification" required>
+                                <option value="">-- Select --</option>
+                                <option value="A">A - High Value</option>
+                                <option value="B">B - Medium Value</option>
+                                <option value="C">C - Low Value</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group"><label>STREET</label><input type="text" id="v_street"></div>
+                        <div class="form-group">
+                            <label>Visit Plan *</label>
+                            <select id="v_plan" required>
+                                <option value="">-- Select Week --</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Visit Date From *</label>
+                            <input type="date" id="v_date_from" required onchange="calculateDays()">
+                        </div>
+                        <div class="form-group">
+                            <label>Visit Date To *</label>
+                            <input type="date" id="v_date_to" required onchange="calculateDays()">
+                        </div>
+                        
+                        <div class="form-group"><label>No of Days</label><input type="number" id="v_days" readonly style="background: #f1f5f9;"></div>
+                        <div class="form-group"><label>Travel</label><input type="text" id="v_travel" placeholder="e.g., Flight, Train"></div>
+                        
+                        <div class="form-group full-width"><label>Remarks</label><textarea id="v_remarks" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
+                        
+                        <div class="form-group"><label>Opportunities</label><textarea id="v_opportunities" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
+                        <div class="form-group"><label>Opp. Value (€)</label><input type="number" id="v_val" step="0.01"></div>
+                        
+                        <div class="form-group full-width"><label>Action Plan</label><textarea id="v_action_plan" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
+                        
+                        <div class="form-group">
+                            <label>Status *</label>
+                            <select id="v_status" required>
+                                <option value="Planned">Planned</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>PO Order Value (€)</label><input type="number" id="v_po_value" step="0.01"></div>
+                        
+                        <div class="form-group full-width"><label>Audit Report</label><textarea id="v_audit" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
+                    </div>
+                </form>
+
+                <!-- CUSTOMER FORM -->
+                <form id="customerForm">
+                    <input type="hidden" id="c_editId">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Customer Code *</label><input type="text" id="c_code" required></div>
+                        <div class="form-group"><label>COMPANY *</label><input type="text" id="c_company" required></div>
+                        <div class="form-group"><label>COUNTRY *</label><input type="text" id="c_country" required></div>
+                        <div class="form-group"><label>ADDRESS</label><input type="text" id="c_address"></div>
+                        <div class="form-group">
+                            <label>80-20 Classification *</label>
+                            <select id="c_8020" required>
+                                <option value="A">A - High Value</option>
+                                <option value="B">B - Medium Value</option>
+                                <option value="C">C - Low Value</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Service - Responsible</label><input type="text" id="c_resp"></div>
+                    </div>
+                </form>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveData()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'dashboard';
+        let visits = [];
+        let customers = [];
+        let currentUser = null;
+        let charts = {};
+
+        // Generate Week options (Week 1 - Week 52)
+        function populateWeekOptions() {
+            const select = document.getElementById('v_plan');
+            for(let i = 1; i <= 52; i++) {
+                const opt = document.createElement('option');
+                opt.value = `Week ${i}`;
+                opt.text = `Week ${i}`;
+                select.appendChild(opt);
+            }
+        }
+
+        // Calculate days between dates
+        function calculateDays() {
+            const from = document.getElementById('v_date_from').value;
+            const to = document.getElementById('v_date_to').value;
+            
+            if(from && to) {
+                const date1 = new Date(from);
+                const date2 = new Date(to);
+                const diffTime = Math.abs(date2 - date1);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                document.getElementById('v_days').value = diffDays;
+            }
+        }
+
+        // --- PERSISTENT STORAGE ---
+        async function loadFromStorage() {
+            try {
+                const visitsResult = await window.storage.get('visits', true);
+                const customersResult = await window.storage.get('customers', true);
+                
+                visits = visitsResult ? JSON.parse(visitsResult.value) : [];
+                customers = customersResult ? JSON.parse(customersResult.value) : [];
+                
+                if (visits.length === 0 && customers.length === 0) {
+                    await initializeDemoData();
+                }
+            } catch (error) {
+                console.log('First time load, initializing demo data');
+                await initializeDemoData();
+            }
+        }
+
+        async function saveToStorage() {
+            try {
+                await window.storage.set('visits', JSON.stringify(visits), true);
+                await window.storage.set('customers', JSON.stringify(customers), true);
+            } catch (error) {
+                console.error('Storage error:', error);
+            }
+        }
+
+        async function initializeDemoData() {
+            // Start with empty data - no default entries
+            customers = [];
+            visits = [];
+            await saveToStorage();
+        }
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            populateWeekOptions();
+            await loadFromStorage();
+            const savedUser = localStorage.getItem('user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showApp();
+            } else {
+                document.getElementById('auth-screen').style.display = 'flex';
+            }
+        });
+
+        // --- AUTH ---
+        function handleLogin() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            if (email && password) {
+                currentUser = { id: 'user1', email: email };
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                showApp();
+            } else {
+                alert('Please enter email and password');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('user');
+            location.reload();
+        }
+
+        function showApp() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('app-screen').style.display = 'flex';
+            document.getElementById('user-display').innerText = currentUser.email;
+            switchTab('dashboard');
+        }
+
+        // --- TAB SWITCHING ---
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            const buttons = document.querySelectorAll('nav button');
+            if(tab==='dashboard') buttons[0].classList.add('active');
+            if(tab==='visits') buttons[1].classList.add('active');
+            if(tab==='customers') buttons[2].classList.add('active');
+
+            document.getElementById('view-dashboard').style.display = tab === 'dashboard' ? 'block' : 'none';
+            document.getElementById('view-data').style.display = tab === 'dashboard' ? 'none' : 'block';
+            
+            const titles = { dashboard: 'Dashboard', visits: 'Visit Planner', customers: 'Customer Master' };
+            document.getElementById('page-title').innerText = titles[tab];
+            
+            // Show/Hide buttons based on tab
+            if(tab === 'dashboard') {
+                document.getElementById('importBtn').style.display = 'none';
+                document.getElementById('exportBtn').style.display = 'none';
+                document.getElementById('addBtn').style.display = 'none';
+            } else if(tab === 'visits') {
+                // For visits: Hide Import, Show Export and Add
+                document.getElementById('importBtn').style.display = 'none'; // Commented out for visits
+                document.getElementById('exportBtn').style.display = 'flex';
+                document.getElementById('addBtn').style.display = 'flex';
+            } else if(tab === 'customers') {
+                // For customers: Show Import, Export and Add
+                document.getElementById('importBtn').style.display = 'flex';
+                document.getElementById('exportBtn').style.display = 'flex';
+                document.getElementById('addBtn').style.display = 'flex';
+            }
+            
+            if (tab === 'dashboard') {
+                updateDashboard();
+            } else {
+                renderView();
+            }
+        }
+
+        // --- DASHBOARD ---
+        function updateDashboard() {
+            const totalVisits = visits.length;
+            const totalOpp = visits.reduce((sum, v) => sum + (parseFloat(v["Opportunities Values I Euro"]) || 0), 0);
+            const completedVisits = visits.filter(v => v.Status === 'Completed').length;
+            const completionRate = totalVisits > 0 ? ((completedVisits / totalVisits) * 100).toFixed(1) : 0;
+
+            document.getElementById('stat-total').innerText = totalVisits;
+            document.getElementById('stat-opp').innerText = '€' + totalOpp.toLocaleString();
+            document.getElementById('stat-completed').innerText = completedVisits;
+            document.getElementById('stat-customers').innerText = customers.length;
+            
+            document.getElementById('stat-total-change').innerText = `${completedVisits} completed`;
+            document.getElementById('stat-opp-change').innerText = `Avg €${(totalOpp / (totalVisits || 1)).toFixed(0).toLocaleString()}`;
+            document.getElementById('stat-completion-rate').innerText = `${completionRate}% completion`;
+            document.getElementById('stat-customers-change').innerText = `${customers.filter(c => c["80-20"] === "A").length} Grade A customers`;
+
+            renderCharts();
+            renderLeaderboard();
+        }
+
+        function renderCharts() {
+            // Destroy old charts
+            Object.values(charts).forEach(chart => chart?.destroy());
+            charts = {};
+
+            // Status Chart
+            const statusData = {
+                Completed: visits.filter(v => v.Status === 'Completed').length,
+                Planned: visits.filter(v => v.Status === 'Planned').length,
+                Pending: visits.filter(v => v.Status === 'Pending').length,
+                Cancelled: visits.filter(v => v.Status === 'Cancelled').length
+            };
+            
+            charts.status = new Chart(document.getElementById('statusChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusData),
+                    datasets: [{
+                        data: Object.values(statusData),
+                        backgroundColor: ['#10b981', '#2563eb', '#f59e0b', '#ef4444']
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'bottom' } } 
+                }
+            });
+
+            // Trend Chart
+            const monthlyData = {};
+            visits.forEach(v => {
+                const month = v["Visit Date From"] ? v["Visit Date From"].substring(0, 7) : 'Unknown';
+                monthlyData[month] = (monthlyData[month] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthlyData).sort();
+
+            charts.trend = new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: sortedMonths,
+                    datasets: [{
+                        label: 'Visits',
+                        data: sortedMonths.map(m => monthlyData[m]),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true,
+                    plugins: { legend: { display: false } } 
+                }
+            });
+
+            // Customer Chart (Top 10)
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            const topCustomers = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            charts.customer = new Chart(document.getElementById('customerChart'), {
+                type: 'bar',
+                data: {
+                    labels: topCustomers.map(c => c[0]),
+                    datasets: [{
+                        label: 'Opportunity Value (€)',
+                        data: topCustomers.map(c => c[1]),
+                        backgroundColor: '#2563eb'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Country Chart
+            const countryData = {};
+            visits.forEach(v => {
+                const country = v.COUNTRY || 'Unknown';
+                countryData[country] = (countryData[country] || 0) + 1;
+            });
+
+            charts.country = new Chart(document.getElementById('countryChart'), {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(countryData),
+                    datasets: [{
+                        data: Object.values(countryData),
+                        backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'bottom' } } 
+                }
+            });
+        }
+
+        function renderLeaderboard() {
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            
+            const sorted = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const html = sorted.map((item, idx) => `
+                <div class="leaderboard-item" style="display:flex; align-items:center; padding:1rem; border-bottom:1px solid var(--border);">
+                    <div style="font-size:1.2rem; font-weight:700; width:40px; color:var(--text-muted);">${idx + 1}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; margin-bottom:0.25rem;">${item[0]}</div>
+                    </div>
+                    <div style="font-size:1.25rem; font-weight:700; color:var(--primary);">€${item[1].toLocaleString()}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('leaderboard').innerHTML = html || '<p style="padding:1rem; text-align:center; color:var(--text-muted);">No data available</p>';
+        }
+
+        // --- DROPDOWN LOGIC ---
+        function renderCustomerDropdown() {
+            const select = document.getElementById('customer_select');
+            select.innerHTML = '<option value="" disabled selected>-- Select Customer --</option>';
+            
+            if(customers.length === 0) {
+                select.innerHTML += '<option disabled>No customers in database</option>';
+                return;
+            }
+
+            customers.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c._id;
+                opt.text = `${c["Customer Code"]} - ${c["COMPANY"]}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function onCustomerSelectChange(selectEl) {
+            const customerId = selectEl.value;
+            if (!customerId) return;
+
+            const customer = customers.find(c => c._id == customerId);
+            if (customer) {
+                document.getElementById('v_code').value = customer["Customer Code"] || "";
+                document.getElementById('v_company').value = customer["COMPANY"] || "";
+                document.getElementById('v_country').value = customer["COUNTRY"] || "";
+                document.getElementById('v_street').value = customer["ADDRESS"] || "";
+                document.getElementById('v_classification').value = customer["80-20"] || "A";
+            }
+        }
+
+        // --- RENDER TABLE ---
+        function renderView() {
+            const tableHead = document.querySelector('#dataTable thead');
+            const tableBody = document.querySelector('#dataTable tbody');
+            const data = currentTab === 'visits' ? visits : customers;
+            
+            if(currentTab === 'visits') {
+                const schema = ["Sl.No", "Customer Code", "COMPANY", "COUNTRY", "PLACE", "Customer Classification", "Visit Plan", "Visit Date From", "Visit Date To", "No of Days", "Status", "Opportunities Values I Euro", "PO Order Value"];
+                tableHead.innerHTML = `<tr>${schema.map(k => `<th style="white-space:nowrap;">${k}</th>`).join('')}<th>Actions</th></tr>`;
+                
+                tableBody.innerHTML = '';
+                data.forEach((row, idx) => {
+                    let tr = `<tr>`;
+                    tr += `<td>${idx + 1}</td>`;
+                    tr += `<td>${row["Customer Code"] || ''}</td>`;
+                    tr += `<td>${row["COMPANY"] || ''}</td>`;
+                    tr += `<td>${row["COUNTRY"] || ''}</td>`;
+                    tr += `<td>${row["PLACE"] || ''}</td>`;
+                    tr += `<td>${row["Customer Classification"] || ''}</td>`;
+                    tr += `<td>${row["Visit Plan"] || ''}</td>`;
+                    tr += `<td>${row["Visit Date From"] || ''}</td>`;
+                    tr += `<td>${row["Visit Date To"] || ''}</td>`;
+                    tr += `<td>${row["No of Days"] || ''}</td>`;
+                    const status = row["Status"] || 'Planned';
+                    tr += `<td><span class="status-badge badge-${status.toLowerCase()}">${status}</span></td>`;
+                    tr += `<td>€${(row["Opportunities Values I Euro"] || 0).toLocaleString()}</td>`;
+                    tr += `<td>€${(row["PO Order Value"] || 0).toLocaleString()}</td>`;
+                    tr += `<td>
+                        <span onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:10px; font-size:1.2rem;">✏️</span>
+                        <span onclick="deleteEntry('${row._id}')" style="cursor:pointer; font-size:1.2rem;">🗑️</span>
+                    </td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', tr);
+                });
+            } else {
+                const schema = ["Customer Code", "COMPANY", "COUNTRY", "ADDRESS", "80-20", "Service - Responsible"];
+                tableHead.innerHTML = `<tr>${schema.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
+                
+                tableBody.innerHTML = '';
+                data.forEach(row => {
+                    let tr = `<tr>`;
+                    schema.forEach(k => {
+                        tr += `<td>${row[k] || ''}</td>`;
+                    });
+                    tr += `<td>
+                        <span onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:10px; font-size:1.2rem;">✏️</span>
+                        <span onclick="deleteEntry('${row._id}')" style="cursor:pointer; font-size:1.2rem;">🗑️</span>
+                    </td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', tr);
+                });
+            }
+        }
+
+        // --- MODAL ---
+        function openModal(row = null) {
+            document.getElementById('entryModal').classList.add('open');
+            if(currentTab === 'visits') {
+                document.getElementById('visitForm').style.display = 'block';
+                document.getElementById('customerForm').style.display = 'none';
+                renderCustomerDropdown();
+
+                if(row) {
+                    const matchingCustomer = customers.find(c => c["Customer Code"] === row["Customer Code"]);
+                    document.getElementById('customer_select').value = matchingCustomer ? matchingCustomer._id : "";
+                    document.getElementById('v_editId').value = row._id;
+                    document.getElementById('v_code').value = row["Customer Code"] || "";
+                    document.getElementById('v_company').value = row["COMPANY"] || "";
+                    document.getElementById('v_country').value = row["COUNTRY"] || "";
+                    document.getElementById('v_place').value = row["PLACE"] || "";
+                    document.getElementById('v_classification').value = row["Customer Classification"] || "";
+                    document.getElementById('v_street').value = row["STREET"] || "";
+                    document.getElementById('v_plan').value = row["Visit Plan"] || "";
+                    document.getElementById('v_date_from').value = row["Visit Date From"] || "";
+                    document.getElementById('v_date_to').value = row["Visit Date To"] || "";
+                    document.getElementById('v_days').value = row["No of Days"] || "";
+                    document.getElementById('v_travel').value = row["Travel"] || "";
+                    document.getElementById('v_remarks').value = row["Remarks"] || "";
+                    document.getElementById('v_opportunities').value = row["Opportunities"] || "";
+                    document.getElementById('v_val').value = row["Opportunities Values I Euro"] || "";
+                    document.getElementById('v_action_plan').value = row["Action Plan"] || "";
+                    document.getElementById('v_status').value = row["Status"] || "Planned";
+                    document.getElementById('v_po_value').value = row["PO Order Value"] || "";
+                    document.getElementById('v_audit').value = row["Audit Report"] || "";
+                } else {
+                    document.getElementById('visitForm').reset();
+                    document.getElementById('v_editId').value = "";
+                    document.getElementById('customer_select').value = "";
+                    document.getElementById('v_code').value = "";
+                }
+            } else {
+                document.getElementById('visitForm').style.display = 'none';
+                document.getElementById('customerForm').style.display = 'block';
+                if(row) {
+                    document.getElementById('c_editId').value = row._id;
+                    document.getElementById('c_code').value = row["Customer Code"] || "";
+                    document.getElementById('c_company').value = row["COMPANY"] || "";
+                    document.getElementById('c_country').value = row["COUNTRY"] || "";
+                    document.getElementById('c_address').value = row["ADDRESS"] || "";
+                    document.getElementById('c_8020').value = row["80-20"] || "A";
+                    document.getElementById('c_resp').value = row["Service - Responsible"] || "";
+                } else {
+                    document.getElementById('customerForm').reset();
+                    document.getElementById('c_editId').value = "";
+                }
+            }
+        }
+
+        function closeModal() { 
+            document.getElementById('entryModal').classList.remove('open'); 
+        }
+
+        async function saveData() {
+            if(currentTab === 'visits') {
+                // Validate required fields
+                const customerSelect = document.getElementById('customer_select').value;
+                const company = document.getElementById('v_company').value.trim();
+                const country = document.getElementById('v_country').value.trim();
+                const place = document.getElementById('v_place').value.trim();
+                const classification = document.getElementById('v_classification').value;
+                const plan = document.getElementById('v_plan').value;
+                const dateFrom = document.getElementById('v_date_from').value;
+                const dateTo = document.getElementById('v_date_to').value;
+                const status = document.getElementById('v_status').value;
+
+                // Check if customer doesn't exist
+                if(!customerSelect) {
+                    alert('❌ Please select a customer from the dropdown.\n\nIf the customer doesn\'t exist, please add them in the Customer Master first.');
+                    return;
+                }
+
+                if(!company || !country || !place || !classification || !plan || !dateFrom || !dateTo || !status) {
+                    alert('❌ Please fill all required fields marked with *');
+                    return;
+                }
+
+                const editId = document.getElementById('v_editId').value;
+                const payload = {
+                    _id: editId || 'v' + Date.now(),
+                    SlNo: editId ? visits.find(v => v._id === editId).SlNo : visits.length + 1,
+                    "Customer Code": document.getElementById('v_code').value,
+                    "COMPANY": company,
+                    "COUNTRY": country,
+                    "PLACE": place,
+                    "Customer Classification": classification,
+                    "STREET": document.getElementById('v_street').value.trim(),
+                    "Visit Plan": plan,
+                    "Visit Date From": dateFrom,
+                    "Visit Date To": dateTo,
+                    "No of Days": parseInt(document.getElementById('v_days').value) || 0,
+                    "Travel": document.getElementById('v_travel').value.trim(),
+                    "Remarks": document.getElementById('v_remarks').value.trim(),
+                    "Opportunities": document.getElementById('v_opportunities').value.trim(),
+                    "Opportunities Values I Euro": parseFloat(document.getElementById('v_val').value) || 0,
+                    "Action Plan": document.getElementById('v_action_plan').value.trim(),
+                    "Status": status,
+                    "PO Order Value": parseFloat(document.getElementById('v_po_value').value) || 0,
+                    "Audit Report": document.getElementById('v_audit').value.trim()
+                };
+
+                if(editId) {
+                    const idx = visits.findIndex(v => v._id === editId);
+                    if(idx !== -1) visits[idx] = payload;
+                } else {
+                    visits.push(payload);
+                }
+            } else {
+                // Validate customer required fields
+                const code = document.getElementById('c_code').value.trim();
+                const company = document.getElementById('c_company').value.trim();
+                const country = document.getElementById('c_country').value.trim();
+
+                if(!code) {
+                    alert('❌ Customer Code is required');
+                    return;
+                }
+
+                if(!company) {
+                    alert('❌ Company Name is required');
+                    return;
+                }
+
+                if(!country) {
+                    alert('❌ Country is required');
+                    return;
+                }
+
+                const editId = document.getElementById('c_editId').value;
+                const payload = {
+                    _id: editId || 'c' + Date.now(),
+                    "Customer Code": code,
+                    "COMPANY": company,
+                    "COUNTRY": country,
+                    "ADDRESS": document.getElementById('c_address').value.trim(),
+                    "80-20": document.getElementById('c_8020').value,
+                    "Service - Responsible": document.getElementById('c_resp').value.trim()
+                };
+
+                if(editId) {
+                    const idx = customers.findIndex(c => c._id === editId);
+                    if(idx !== -1) customers[idx] = payload;
+                } else {
+                    customers.push(payload);
+                }
+            }
+
+            await saveToStorage();
+            closeModal();
+            switchTab(currentTab);
+        }
+
+        function editEntry(id) {
+            const data = currentTab === 'visits' 
+                ? visits.find(v => v._id === id) 
+                : customers.find(c => c._id === id);
+            openModal(data);
+        }
+
+        async function deleteEntry(id) {
+            if(!confirm("Delete this entry?")) return;
+            
+            if(currentTab === 'visits') {
+                visits = visits.filter(v => v._id !== id);
+                // Renumber SlNo
+                visits.forEach((v, idx) => v.SlNo = idx + 1);
+            } else {
+                customers = customers.filter(c => c._id !== id);
+            }
+            
+            await saveToStorage();
+            switchTab(currentTab);
+        }
+
+        function filterTable(q) {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            q = q.toLowerCase();
+            rows.forEach(r => { 
+                r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; 
+            });
+        }
+
+        // --- IMPORT/EXPORT ---
+        async function handleImport(input) {
+            const file = input.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const workbook = XLSX.read(e.target.result, {type: 'array'});
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    
+                    if(json.length === 0) {
+                        alert('No data found in the file');
+                        return;
+                    }
+
+                    // Define expected fields
+                    let expectedFields, importedCount = 0, skippedCount = 0, missingFieldsRows = [];
+                    
+                    if(currentTab === 'visits') {
+                        expectedFields = ["Customer Code", "COMPANY", "COUNTRY", "PLACE", "Customer Classification", "Visit Plan", "Visit Date From", "Visit Date To", "Status"];
+                        
+                        json.forEach((row, idx) => {
+                            // Check if all required fields exist
+                            const missingFields = expectedFields.filter(field => !row[field] || row[field].toString().trim() === '');
+                            
+                            if(missingFields.length > 0) {
+                                skippedCount++;
+                                missingFieldsRows.push(`Row ${idx + 2}: Missing [${missingFields.join(', ')}]`);
+                            } else {
+                                // Valid row - add it
+                                row._id = 'v' + Date.now() + Math.random();
+                                row.SlNo = visits.length + importedCount + 1;
+                                
+                                // Ensure all fields exist with defaults
+                                row["STREET"] = row["STREET"] || "";
+                                row["No of Days"] = row["No of Days"] || 0;
+                                row["Travel"] = row["Travel"] || "";
+                                row["Remarks"] = row["Remarks"] || "";
+                                row["Opportunities"] = row["Opportunities"] || "";
+                                row["Opportunities Values I Euro"] = parseFloat(row["Opportunities Values I Euro"]) || 0;
+                                row["Action Plan"] = row["Action Plan"] || "";
+                                row["PO Order Value"] = parseFloat(row["PO Order Value"]) || 0;
+                                row["Audit Report"] = row["Audit Report"] || "";
+                                
+                                visits.push(row);
+                                importedCount++;
+                            }
+                        });
+                    } else {
+                        expectedFields = ["Customer Code", "COMPANY", "COUNTRY"];
+                        
+                        json.forEach((row, idx) => {
+                            // Check if all required fields exist
+                            const missingFields = expectedFields.filter(field => !row[field] || row[field].toString().trim() === '');
+                            
+                            if(missingFields.length > 0) {
+                                skippedCount++;
+                                missingFieldsRows.push(`Row ${idx + 2}: Missing [${missingFields.join(', ')}]`);
+                            } else {
+                                // Valid row - add it
+                                row._id = 'c' + Date.now() + Math.random();
+                                
+                                // Ensure all fields exist with defaults
+                                row["ADDRESS"] = row["ADDRESS"] || "";
+                                row["80-20"] = row["80-20"] || "C";
+                                row["Service - Responsible"] = row["Service - Responsible"] || "";
+                                
+                                customers.push(row);
+                                importedCount++;
+                            }
+                        });
+                    }
+                    
+                    await saveToStorage();
+                    
+                    // Show detailed import report
+                    let message = `✅ Import Complete!\n\n`;
+                    message += `✓ Successfully imported: ${importedCount} records\n`;
+                    
+                    if(skippedCount > 0) {
+                        message += `✗ Skipped: ${skippedCount} records (missing required fields)\n\n`;
+                        message += `⚠️ Please check the following rows and add them manually:\n\n`;
+                        message += missingFieldsRows.slice(0, 10).join('\n');
+                        
+                        if(missingFieldsRows.length > 10) {
+                            message += `\n... and ${missingFieldsRows.length - 10} more rows`;
+                        }
+                        
+                        message += `\n\n📋 Required fields for ${currentTab}:\n`;
+                        message += expectedFields.join(', ');
+                    }
+                    
+                    alert(message);
+                    switchTab(currentTab);
+                } catch (error) {
+                    alert('❌ Import failed: ' + error.message + '\n\nPlease check your file format and try again.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            input.value = '';
+        }
+
+        function exportData() {
+            const data = currentTab === 'visits' ? visits : customers;
+            if(!data.length) return alert("No data to export");
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, `export_${currentTab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+    </script>
+
+    <style>
+        .table-container { background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+        .table-controls { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; padding: 0.75rem; background: #f8fafc; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:hover { background-color: #f8fafc; }
+
+        .status-badge { padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+        .badge-planned { background: #eff6ff; color: var(--primary); }
+        .badge-completed { background: #ecfdf5; color: var(--success); }
+        .badge-pending { background: #fef3c7; color: var(--warning); }
+        .badge-cancelled { background: #fee2e2; color: var(--danger); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 50; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-overlay.open { display: flex; }
+        .modal { background: white; width: 95%; max-width: 1000px; max-height: 90vh; border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-body { padding: 1.5rem; overflow-y: auto; }
+        .modal-footer { padding: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 1rem; background: #f8fafc; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--secondary); }
+        .form-group input, .form-group select, .form-group textarea { padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 0.9rem; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        #visitForm { display: block; } #customerForm { display: none; }
+        .full-width { grid-column: span 2; }
+
+        select.custom-select { 
+            width: 100%; padding: 0.6rem; border: 1px solid var(--border); 
+            border-radius: 6px; background-color: white; appearance: none; 
+            cursor: pointer; font-size: 0.9rem; 
+        }
+        select.custom-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+    </style>
+</body>
+</html>
