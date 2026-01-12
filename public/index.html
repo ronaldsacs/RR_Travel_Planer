@@ -494,4 +494,450 @@
                 options: { 
                     responsive: true, 
                     maintainAspectRatio: true,
-                    plugins: { legend: { position: '
+                    plugins: { legend: { position: 'bottom' } } 
+                }
+            });
+
+            // Trend Chart
+            const monthlyData = {};
+            visits.forEach(v => {
+                const month = v["Visit Date From"] ? v["Visit Date From"].substring(0, 7) : 'Unknown';
+                monthlyData[month] = (monthlyData[month] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthlyData).sort();
+
+            charts.trend = new Chart(document.getElementById('trendChart'), {
+                type: 'line',
+                data: {
+                    labels: sortedMonths,
+                    datasets: [{
+                        label: 'Visits',
+                        data: sortedMonths.map(m => monthlyData[m]),
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true,
+                    plugins: { legend: { display: false } } 
+                }
+            });
+
+            // Customer Chart (Top 10)
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            const topCustomers = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            charts.customer = new Chart(document.getElementById('customerChart'), {
+                type: 'bar',
+                data: {
+                    labels: topCustomers.map(c => c[0]),
+                    datasets: [{
+                        label: 'Opportunity Value (€)',
+                        data: topCustomers.map(c => c[1]),
+                        backgroundColor: '#2563eb'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Country Chart
+            const countryData = {};
+            visits.forEach(v => {
+                const country = v.COUNTRY || 'Unknown';
+                countryData[country] = (countryData[country] || 0) + 1;
+            });
+
+            charts.country = new Chart(document.getElementById('countryChart'), {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(countryData),
+                    datasets: [{
+                        data: Object.values(countryData),
+                        backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'bottom' } } 
+                }
+            });
+        }
+
+        function renderLeaderboard() {
+            const customerOpp = {};
+            visits.forEach(v => {
+                const company = v.COMPANY || 'Unknown';
+                customerOpp[company] = (customerOpp[company] || 0) + (parseFloat(v["Opportunities Values I Euro"]) || 0);
+            });
+            
+            const sorted = Object.entries(customerOpp)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const html = sorted.map((item, idx) => `
+                <div class="leaderboard-item" style="display:flex; align-items:center; padding:1rem; border-bottom:1px solid var(--border);">
+                    <div style="font-size:1.2rem; font-weight:700; width:40px; color:var(--text-muted);">${idx + 1}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600; margin-bottom:0.25rem;">${item[0]}</div>
+                    </div>
+                    <div style="font-size:1.25rem; font-weight:700; color:var(--primary);">€${item[1].toLocaleString()}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('leaderboard').innerHTML = html || '<p style="padding:1rem; text-align:center; color:var(--text-muted);">No data available</p>';
+        }
+
+        // --- DROPDOWN LOGIC ---
+        function renderCustomerDropdown() {
+            const select = document.getElementById('customer_select');
+            select.innerHTML = '<option value="" disabled selected>-- Select Customer --</option>';
+            
+            if(customers.length === 0) {
+                select.innerHTML += '<option disabled>No customers in database</option>';
+                return;
+            }
+
+            customers.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c._id;
+                opt.text = `${c["Customer Code"]} - ${c["COMPANY"]}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function onCustomerSelectChange(selectEl) {
+            const customerId = selectEl.value;
+            if (!customerId) return;
+
+            const customer = customers.find(c => c._id == customerId);
+            if (customer) {
+                document.getElementById('v_code').value = customer["Customer Code"] || "";
+                document.getElementById('v_company').value = customer["COMPANY"] || "";
+                document.getElementById('v_country').value = customer["COUNTRY"] || "";
+                document.getElementById('v_street').value = customer["ADDRESS"] || "";
+                document.getElementById('v_classification').value = customer["80-20"] || "A";
+            }
+        }
+
+        // --- RENDER TABLE ---
+        function renderView() {
+            const tableHead = document.querySelector('#dataTable thead');
+            const tableBody = document.querySelector('#dataTable tbody');
+            const data = currentTab === 'visits' ? visits : customers;
+            
+            if(currentTab === 'visits') {
+                const schema = ["Sl.No", "Customer Code", "COMPANY", "COUNTRY", "PLACE", "Customer Classification", "Visit Plan", "Visit Date From", "Visit Date To", "No of Days", "Status", "Opportunities Values I Euro", "PO Order Value"];
+                tableHead.innerHTML = `<tr>${schema.map(k => `<th style="white-space:nowrap;">${k}</th>`).join('')}<th>Actions</th></tr>`;
+                
+                tableBody.innerHTML = '';
+                data.forEach((row, idx) => {
+                    let tr = `<tr>`;
+                    tr += `<td>${idx + 1}</td>`;
+                    tr += `<td>${row["Customer Code"] || ''}</td>`;
+                    tr += `<td>${row["COMPANY"] || ''}</td>`;
+                    tr += `<td>${row["COUNTRY"] || ''}</td>`;
+                    tr += `<td>${row["PLACE"] || ''}</td>`;
+                    tr += `<td>${row["Customer Classification"] || ''}</td>`;
+                    tr += `<td>${row["Visit Plan"] || ''}</td>`;
+                    tr += `<td>${row["Visit Date From"] || ''}</td>`;
+                    tr += `<td>${row["Visit Date To"] || ''}</td>`;
+                    tr += `<td>${row["No of Days"] || ''}</td>`;
+                    const status = row["Status"] || 'Planned';
+                    tr += `<td><span class="status-badge badge-${status.toLowerCase()}">${status}</span></td>`;
+                    tr += `<td>€${(row["Opportunities Values I Euro"] || 0).toLocaleString()}</td>`;
+                    tr += `<td>€${(row["PO Order Value"] || 0).toLocaleString()}</td>`;
+                    tr += `<td>
+                        <span onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:10px; font-size:1.2rem;">✏️</span>
+                        <span onclick="deleteEntry('${row._id}')" style="cursor:pointer; font-size:1.2rem;">🗑️</span>
+                    </td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', tr);
+                });
+            } else {
+                const schema = ["Customer Code", "COMPANY", "COUNTRY", "ADDRESS", "80-20", "Service - Responsible"];
+                tableHead.innerHTML = `<tr>${schema.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
+                
+                tableBody.innerHTML = '';
+                data.forEach(row => {
+                    let tr = `<tr>`;
+                    schema.forEach(k => {
+                        tr += `<td>${row[k] || ''}</td>`;
+                    });
+                    tr += `<td>
+                        <span onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:10px; font-size:1.2rem;">✏️</span>
+                        <span onclick="deleteEntry('${row._id}')" style="cursor:pointer; font-size:1.2rem;">🗑️</span>
+                    </td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', tr);
+                });
+            }
+        }
+
+        // --- MODAL ---
+        function openModal(row = null) {
+            document.getElementById('entryModal').classList.add('open');
+            if(currentTab === 'visits') {
+                document.getElementById('visitForm').style.display = 'block';
+                document.getElementById('customerForm').style.display = 'none';
+                renderCustomerDropdown();
+
+                if(row) {
+                    const matchingCustomer = customers.find(c => c["Customer Code"] === row["Customer Code"]);
+                    document.getElementById('customer_select').value = matchingCustomer ? matchingCustomer._id : "";
+                    document.getElementById('v_editId').value = row._id;
+                    document.getElementById('v_code').value = row["Customer Code"] || "";
+                    document.getElementById('v_company').value = row["COMPANY"] || "";
+                    document.getElementById('v_country').value = row["COUNTRY"] || "";
+                    document.getElementById('v_place').value = row["PLACE"] || "";
+                    document.getElementById('v_classification').value = row["Customer Classification"] || "";
+                    document.getElementById('v_street').value = row["STREET"] || "";
+                    document.getElementById('v_plan').value = row["Visit Plan"] || "";
+                    document.getElementById('v_date_from').value = row["Visit Date From"] || "";
+                    document.getElementById('v_date_to').value = row["Visit Date To"] || "";
+                    document.getElementById('v_days').value = row["No of Days"] || "";
+                    document.getElementById('v_travel').value = row["Travel"] || "";
+                    document.getElementById('v_remarks').value = row["Remarks"] || "";
+                    document.getElementById('v_opportunities').value = row["Opportunities"] || "";
+                    document.getElementById('v_val').value = row["Opportunities Values I Euro"] || "";
+                    document.getElementById('v_action_plan').value = row["Action Plan"] || "";
+                    document.getElementById('v_status').value = row["Status"] || "Planned";
+                    document.getElementById('v_po_value').value = row["PO Order Value"] || "";
+                    document.getElementById('v_audit').value = row["Audit Report"] || "";
+                } else {
+                    document.getElementById('visitForm').reset();
+                    document.getElementById('v_editId').value = "";
+                    document.getElementById('customer_select').value = "";
+                    document.getElementById('v_code').value = "";
+                }
+            } else {
+                document.getElementById('visitForm').style.display = 'none';
+                document.getElementById('customerForm').style.display = 'block';
+                if(row) {
+                    document.getElementById('c_editId').value = row._id;
+                    document.getElementById('c_code').value = row["Customer Code"] || "";
+                    document.getElementById('c_company').value = row["COMPANY"] || "";
+                    document.getElementById('c_country').value = row["COUNTRY"] || "";
+                    document.getElementById('c_address').value = row["ADDRESS"] || "";
+                    document.getElementById('c_8020').value = row["80-20"] || "A";
+                    document.getElementById('c_resp').value = row["Service - Responsible"] || "";
+                } else {
+                    document.getElementById('customerForm').reset();
+                    document.getElementById('c_editId').value = "";
+                }
+            }
+        }
+
+        function closeModal() { 
+            document.getElementById('entryModal').classList.remove('open'); 
+        }
+
+        async function saveData() {
+            if(currentTab === 'visits') {
+                // Validate required fields
+                const customer = document.getElementById('customer_select').value;
+                const company = document.getElementById('v_company').value;
+                const country = document.getElementById('v_country').value;
+                const place = document.getElementById('v_place').value;
+                const classification = document.getElementById('v_classification').value;
+                const plan = document.getElementById('v_plan').value;
+                const dateFrom = document.getElementById('v_date_from').value;
+                const dateTo = document.getElementById('v_date_to').value;
+                const status = document.getElementById('v_status').value;
+
+                if(!customer || !company || !country || !place || !classification || !plan || !dateFrom || !dateTo || !status) {
+                    alert('Please fill all required fields marked with *');
+                    return;
+                }
+
+                const editId = document.getElementById('v_editId').value;
+                const payload = {
+                    _id: editId || 'v' + Date.now(),
+                    SlNo: editId ? visits.find(v => v._id === editId).SlNo : visits.length + 1,
+                    "Customer Code": document.getElementById('v_code').value,
+                    "COMPANY": company,
+                    "COUNTRY": country,
+                    "PLACE": place,
+                    "Customer Classification": classification,
+                    "STREET": document.getElementById('v_street').value,
+                    "Visit Plan": plan,
+                    "Visit Date From": dateFrom,
+                    "Visit Date To": dateTo,
+                    "No of Days": parseInt(document.getElementById('v_days').value) || 0,
+                    "Travel": document.getElementById('v_travel').value,
+                    "Remarks": document.getElementById('v_remarks').value,
+                    "Opportunities": document.getElementById('v_opportunities').value,
+                    "Opportunities Values I Euro": parseFloat(document.getElementById('v_val').value) || 0,
+                    "Action Plan": document.getElementById('v_action_plan').value,
+                    "Status": status,
+                    "PO Order Value": parseFloat(document.getElementById('v_po_value').value) || 0,
+                    "Audit Report": document.getElementById('v_audit').value
+                };
+
+                if(editId) {
+                    const idx = visits.findIndex(v => v._id === editId);
+                    if(idx !== -1) visits[idx] = payload;
+                } else {
+                    visits.push(payload);
+                }
+            } else {
+                // Validate customer required fields
+                const code = document.getElementById('c_code').value;
+                const company = document.getElementById('c_company').value;
+                const country = document.getElementById('c_country').value;
+
+                if(!code || !company || !country) {
+                    alert('Please fill all required fields marked with *');
+                    return;
+                }
+
+                const editId = document.getElementById('c_editId').value;
+                const payload = {
+                    _id: editId || 'c' + Date.now(),
+                    "Customer Code": code,
+                    "COMPANY": company,
+                    "COUNTRY": country,
+                    "ADDRESS": document.getElementById('c_address').value,
+                    "80-20": document.getElementById('c_8020').value,
+                    "Service - Responsible": document.getElementById('c_resp').value
+                };
+
+                if(editId) {
+                    const idx = customers.findIndex(c => c._id === editId);
+                    if(idx !== -1) customers[idx] = payload;
+                } else {
+                    customers.push(payload);
+                }
+            }
+
+            await saveToStorage();
+            closeModal();
+            switchTab(currentTab);
+        }
+
+        function editEntry(id) {
+            const data = currentTab === 'visits' 
+                ? visits.find(v => v._id === id) 
+                : customers.find(c => c._id === id);
+            openModal(data);
+        }
+
+        async function deleteEntry(id) {
+            if(!confirm("Delete this entry?")) return;
+            
+            if(currentTab === 'visits') {
+                visits = visits.filter(v => v._id !== id);
+                // Renumber SlNo
+                visits.forEach((v, idx) => v.SlNo = idx + 1);
+            } else {
+                customers = customers.filter(c => c._id !== id);
+            }
+            
+            await saveToStorage();
+            switchTab(currentTab);
+        }
+
+        function filterTable(q) {
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+            q = q.toLowerCase();
+            rows.forEach(r => { 
+                r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; 
+            });
+        }
+
+        // --- IMPORT/EXPORT ---
+        async function handleImport(input) {
+            const file = input.files[0];
+            if(!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const workbook = XLSX.read(e.target.result, {type: 'array'});
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    
+                    if(currentTab === 'visits') {
+                        json.forEach((row, idx) => {
+                            row._id = 'v' + Date.now() + Math.random();
+                            row.SlNo = visits.length + idx + 1;
+                            visits.push(row);
+                        });
+                    } else {
+                        json.forEach(row => {
+                            row._id = 'c' + Date.now() + Math.random();
+                            customers.push(row);
+                        });
+                    }
+                    
+                    await saveToStorage();
+                    alert(`Imported ${json.length} records`);
+                    switchTab(currentTab);
+                } catch (error) {
+                    alert('Import failed: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            input.value = '';
+        }
+
+        function exportData() {
+            const data = currentTab === 'visits' ? visits : customers;
+            if(!data.length) return alert("No data to export");
+            
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+            XLSX.writeFile(wb, `export_${currentTab}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        }
+    </script>
+
+    <style>
+        .table-container { background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+        .table-controls { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; padding: 0.75rem; background: #f8fafc; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:hover { background-color: #f8fafc; }
+
+        .status-badge { padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+        .badge-planned { background: #eff6ff; color: var(--primary); }
+        .badge-completed { background: #ecfdf5; color: var(--success); }
+        .badge-pending { background: #fef3c7; color: var(--warning); }
+        .badge-cancelled { background: #fee2e2; color: var(--danger); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 50; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-overlay.open { display: flex; }
+        .modal { background: white; width: 95%; max-width: 1000px; max-height: 90vh; border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+        .modal-body { padding: 1.5rem; overflow-y: auto; }
+        .modal-footer { padding: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 1rem; background: #f8fafc; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--secondary); }
+        .form-group input, .form-group select, .form-group textarea { padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 0.9rem; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        #visitForm { display: block; } #customerForm { display: none; }
+        .full-width { grid-column: span 2; }
+
+        select.custom-select { 
+            width: 100%; padding: 0.6rem; border: 1px solid var(--border); 
+            border-radius: 6px; background-color: white; appearance: none; 
+            cursor: pointer; font-size: 0.9rem; 
+        }
+        select.custom-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+    </style>
+</body>
+</html>
