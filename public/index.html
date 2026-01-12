@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Travel Planner - Selectable Dropdown</title>
+    <title>Travel Planner - Advanced Dashboard</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary: #2563eb; --primary-light: #eff6ff; --primary-dark: #1e40af;
             --secondary: #64748b; --bg-body: #f1f5f9; --bg-card: #ffffff;
             --text-main: #0f172a; --text-muted: #64748b; --border: #e2e8f0;
-            --success: #10b981; --danger: #ef4444; --radius: 12px;
+            --success: #10b981; --danger: #ef4444; --warning: #f59e0b; --radius: 12px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-body); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -51,10 +52,19 @@
         .content-scroll { flex: 1; overflow-y: auto; padding: 2rem; }
 
         /* Dashboard */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); display: flex; flex-direction: column; }
+        .stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
         .stat-title { color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
-        .stat-value { font-size: 1.75rem; font-weight: 700; margin-top: 0.5rem; }
+        .stat-value { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .stat-change { font-size: 0.75rem; font-weight: 600; }
+        .stat-change.positive { color: var(--success); }
+        .stat-change.negative { color: var(--danger); }
+
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .chart-card { background: var(--bg-card); padding: 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); }
+        .chart-title { font-size: 1rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--text-main); }
 
         /* Table */
         .table-container { background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
@@ -67,8 +77,9 @@
         .status-badge { padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
         .badge-planned { background: #eff6ff; color: var(--primary); }
         .badge-completed { background: #ecfdf5; color: var(--success); }
+        .badge-pending { background: #fef3c7; color: var(--warning); }
 
-        /* Modal & Select */
+        /* Modal */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 50; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         .modal-overlay.open { display: flex; }
         .modal { background: white; width: 95%; max-width: 900px; max-height: 90vh; border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
@@ -84,18 +95,20 @@
         #visitForm { display: block; } #customerForm { display: none; }
         .full-width { grid-column: span 2; }
 
-        /* Standard Select Styling */
         select.custom-select { 
-            width: 100%; 
-            padding: 0.6rem; 
-            border: 1px solid var(--border); 
-            border-radius: 6px; 
-            background-color: white; 
-            appearance: none; /* remove default arrow */ 
-            cursor: pointer; 
-            font-size: 0.9rem; 
+            width: 100%; padding: 0.6rem; border: 1px solid var(--border); 
+            border-radius: 6px; background-color: white; appearance: none; 
+            cursor: pointer; font-size: 0.9rem; 
         }
         select.custom-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        /* Leaderboard */
+        .leaderboard-item { display: flex; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border); }
+        .leaderboard-item:last-child { border-bottom: none; }
+        .leaderboard-rank { font-size: 1.2rem; font-weight: 700; width: 40px; color: var(--text-muted); }
+        .leaderboard-info { flex: 1; }
+        .leaderboard-name { font-weight: 600; margin-bottom: 0.25rem; }
+        .leaderboard-value { font-size: 1.25rem; font-weight: 700; color: var(--primary); }
         
     </style>
 </head>
@@ -106,9 +119,12 @@
         <div class="auth-card">
             <div style="font-size: 1.5rem; font-weight: 800; color: var(--primary); margin-bottom: 0.5rem; text-align: center;">Travel Planner</div>
             <div style="text-align: center; color: var(--secondary); margin-bottom: 2rem; font-size: 0.9rem;">Sign in to manage your schedule</div>
-            <input type="email" id="login-email" class="auth-input" placeholder="Email Address">
-            <input type="password" id="login-password" class="auth-input" placeholder="Password">
+            <input type="email" id="login-email" class="auth-input" placeholder="Email Address" value="demo@company.com">
+            <input type="password" id="login-password" class="auth-input" placeholder="Password" value="demo123">
             <button class="btn-block" onclick="handleLogin()">Sign In</button>
+            <div style="text-align: center; margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">
+                Demo: demo@company.com / demo123
+            </div>
         </div>
     </div>
 
@@ -118,15 +134,15 @@
         <aside>
             <div class="brand"><i class="ph ph-airplane-tilt"></i> Travel Planner</div>
             <nav>
-                <button class="active" onclick="switchTab('visits')"><i class="ph ph-calendar-check"></i> Visit Planner</button>
+                <button onclick="switchTab('dashboard')"><i class="ph ph-chart-pie-slice"></i> Dashboard</button>
+                <button onclick="switchTab('visits')"><i class="ph ph-calendar-check"></i> Visit Planner</button>
                 <button onclick="switchTab('customers')"><i class="ph ph-users-three"></i> Customer Master</button>
-                <button onclick="switchTab('dashboard')"><i class="ph ph-chart-pie-slice"></i> Analytics / KPI</button>
             </nav>
         </aside>
 
         <main>
             <header>
-                <div style="font-size: 1.2rem; font-weight: 700;" id="page-title">Visit Planner</div>
+                <div style="font-size: 1.2rem; font-weight: 700;" id="page-title">Dashboard</div>
                 <div class="header-actions">
                     <span style="font-size: 0.85rem; font-weight: 600; color: var(--secondary); margin-right: 1rem;" id="user-display"></span>
                     <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleImport(this)">
@@ -139,16 +155,83 @@
 
             <div class="content-scroll">
                 <!-- DASHBOARD VIEW -->
-                <div id="view-dashboard" style="display: none;">
+                <div id="view-dashboard" style="display: block;">
+                    <!-- KPI Cards -->
                     <div class="stats-grid">
-                        <div class="stat-card"><span class="stat-title">Total Visits</span><span class="stat-value" id="stat-total">0</span></div>
-                        <div class="stat-card"><span class="stat-title">Total Opportunities (€)</span><span class="stat-value" id="stat-opp">€0</span></div>
-                        <div class="stat-card"><span class="stat-title">Total Orders (€)</span><span class="stat-value" id="stat-order">€0</span></div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Total Visits</div>
+                                    <div class="stat-value" id="stat-total">0</div>
+                                    <div class="stat-change positive" id="stat-total-change">+0% from last month</div>
+                                </div>
+                                <div class="stat-icon" style="background: var(--primary-light); color: var(--primary);">📅</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Opportunities (€)</div>
+                                    <div class="stat-value" id="stat-opp">€0</div>
+                                    <div class="stat-change positive" id="stat-opp-change">+0% pipeline</div>
+                                </div>
+                                <div class="stat-icon" style="background: #fef3c7; color: var(--warning);">💰</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Completed Visits</div>
+                                    <div class="stat-value" id="stat-completed">0</div>
+                                    <div class="stat-change positive" id="stat-completion-rate">0% completion</div>
+                                </div>
+                                <div class="stat-icon" style="background: #ecfdf5; color: var(--success);">✅</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <div>
+                                    <div class="stat-title">Active Customers</div>
+                                    <div class="stat-value" id="stat-customers">0</div>
+                                    <div class="stat-change positive" id="stat-customers-change">Total in database</div>
+                                </div>
+                                <div class="stat-icon" style="background: #ede9fe; color: #7c3aed;">👥</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-title">Visit Status Distribution</div>
+                            <canvas id="statusChart" height="200"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">Monthly Visit Trend</div>
+                            <canvas id="trendChart" height="200"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-title">Top 10 Customers by Opportunities</div>
+                            <canvas id="customerChart" height="300"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-title">Visits by Country</div>
+                            <canvas id="countryChart" height="300"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Top Performers -->
+                    <div class="chart-card" style="margin-top: 1.5rem;">
+                        <div class="chart-title">🏆 Top Performing Customers (by Opportunity Value)</div>
+                        <div id="leaderboard"></div>
                     </div>
                 </div>
 
                 <!-- DATA TABLE VIEW -->
-                <div id="view-data">
+                <div id="view-data" style="display: none;">
                     <div class="table-container">
                         <div class="table-controls">
                             <input type="text" placeholder="Search..." style="padding:0.5rem; border:1px solid var(--border); border-radius:6px; width:300px; outline:none;" onkeyup="filterTable(this.value)">
@@ -171,21 +254,16 @@
             </div>
             <div class="modal-body">
                 
-                <!-- VISIT FORM (With SELECTABLE DROPDOWN) -->
+                <!-- VISIT FORM -->
                 <form id="visitForm">
                     <input type="hidden" id="v_editId">
                     <div class="form-grid">
-                        
-                        <!-- THE FIX: Select Customer Dropdown -->
                         <div class="form-group">
                             <label>Select Customer</label>
                             <select id="customer_select" class="custom-select" onchange="onCustomerSelectChange(this)">
                                 <option value="" disabled selected>-- Select Customer --</option>
-                                <!-- Options populated by JS -->
                             </select>
                         </div>
-
-                        <!-- Auto-filled Fields -->
                         <div class="form-group"><label>Customer Code</label><input type="text" id="v_code" readonly style="background: #f1f5f9; cursor: not-allowed;"></div>
                         <div class="form-group"><label>COMPANY</label><input type="text" id="v_company"></div>
                         <div class="form-group"><label>COUNTRY</label><input type="text" id="v_country"></div>
@@ -195,7 +273,7 @@
                         <div class="form-group"><label>Visit Date</label><input type="date" id="v_date"></div>
                         <div class="form-group"><label>Status</label><select id="v_status"><option>Planned</option><option>Completed</option><option>Pending</option></select></div>
                         <div class="form-group"><label>Opp. Value (€)</label><input type="number" id="v_val"></div>
-                        <div class="form-group full-width" style="grid-column: span 2"><label>Remarks</label><textarea id="v_remarks" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
+                        <div class="form-group full-width"><label>Remarks</label><textarea id="v_remarks" rows="2" style="width:100%; padding:0.6rem; border-radius:6px; border:1px solid var(--border);"></textarea></div>
                     </div>
                 </form>
 
@@ -221,15 +299,68 @@
     </div>
 
     <script>
-        // --- CONFIG ---
-        const API_URL = window.location.origin + '/api';
-        let currentTab = 'visits';
-        let visits = [], customers = [];
-        let currentUser = JSON.parse(localStorage.getItem('user'));
+        let currentTab = 'dashboard';
+        let visits = [];
+        let customers = [];
+        let currentUser = null;
+        let charts = {};
+
+        // --- PERSISTENT STORAGE ---
+        async function loadFromStorage() {
+            try {
+                const visitsResult = await window.storage.get('visits', true);
+                const customersResult = await window.storage.get('customers', true);
+                
+                visits = visitsResult ? JSON.parse(visitsResult.value) : [];
+                customers = customersResult ? JSON.parse(customersResult.value) : [];
+                
+                // Add demo data if empty
+                if (visits.length === 0 && customers.length === 0) {
+                    await initializeDemoData();
+                }
+            } catch (error) {
+                console.log('First time load, initializing demo data');
+                await initializeDemoData();
+            }
+        }
+
+        async function saveToStorage() {
+            try {
+                await window.storage.set('visits', JSON.stringify(visits), true);
+                await window.storage.set('customers', JSON.stringify(customers), true);
+            } catch (error) {
+                console.error('Storage error:', error);
+            }
+        }
+
+        async function initializeDemoData() {
+            customers = [
+                { _id: 'c1', "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "ADDRESS": "Berlin Street 123", "80-20": "A", "Service - Responsible": "John Doe" },
+                { _id: 'c2', "Customer Code": "CUST002", "COMPANY": "Global Industries Ltd", "COUNTRY": "UK", "ADDRESS": "London Road 456", "80-20": "A", "Service - Responsible": "Jane Smith" },
+                { _id: 'c3', "Customer Code": "CUST003", "COMPANY": "Innovate Corp", "COUNTRY": "France", "ADDRESS": "Paris Avenue 789", "80-20": "B", "Service - Responsible": "Mike Johnson" },
+                { _id: 'c4', "Customer Code": "CUST004", "COMPANY": "Digital Ventures", "COUNTRY": "Spain", "ADDRESS": "Madrid Plaza 321", "80-20": "B", "Service - Responsible": "Sarah Wilson" },
+                { _id: 'c5', "Customer Code": "CUST005", "COMPANY": "Future Systems", "COUNTRY": "Italy", "ADDRESS": "Rome Via 654", "80-20": "C", "Service - Responsible": "Tom Brown" }
+            ];
+
+            visits = [
+                { _id: 'v1', "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "ADDRESS": "Berlin Street 123", "PLACE": "Berlin", "Visit Plan": "Q1 Review", "Visit Date": "2025-01-15", "Status": "Completed", "Opportunities Values I Euro": 50000, "Remarks": "Successful meeting" },
+                { _id: 'v2', "Customer Code": "CUST002", "COMPANY": "Global Industries Ltd", "COUNTRY": "UK", "ADDRESS": "London Road 456", "PLACE": "London", "Visit Plan": "Product Demo", "Visit Date": "2025-01-20", "Status": "Planned", "Opportunities Values I Euro": 75000, "Remarks": "New product interest" },
+                { _id: 'v3', "Customer Code": "CUST001", "COMPANY": "Tech Solutions GmbH", "COUNTRY": "Germany", "ADDRESS": "Berlin Street 123", "PLACE": "Munich", "Visit Plan": "Contract Signing", "Visit Date": "2025-02-05", "Status": "Planned", "Opportunities Values I Euro": 100000, "Remarks": "Major deal pending" },
+                { _id: 'v4', "Customer Code": "CUST003", "COMPANY": "Innovate Corp", "COUNTRY": "France", "ADDRESS": "Paris Avenue 789", "PLACE": "Paris", "Visit Plan": "Technical Review", "Visit Date": "2025-01-10", "Status": "Completed", "Opportunities Values I Euro": 35000, "Remarks": "Follow-up needed" },
+                { _id: 'v5', "Customer Code": "CUST004", "COMPANY": "Digital Ventures", "COUNTRY": "Spain", "ADDRESS": "Madrid Plaza 321", "PLACE": "Madrid", "Visit Plan": "Strategy Meeting", "Visit Date": "2025-01-25", "Status": "Pending", "Opportunities Values I Euro": 60000, "Remarks": "Awaiting approval" },
+                { _id: 'v6', "Customer Code": "CUST002", "COMPANY": "Global Industries Ltd", "COUNTRY": "UK", "ADDRESS": "London Road 456", "PLACE": "Manchester", "Visit Plan": "Site Visit", "Visit Date": "2024-12-20", "Status": "Completed", "Opportunities Values I Euro": 45000, "Remarks": "Good feedback" },
+                { _id: 'v7', "Customer Code": "CUST005", "COMPANY": "Future Systems", "COUNTRY": "Italy", "ADDRESS": "Rome Via 654", "PLACE": "Rome", "Visit Plan": "Initial Contact", "Visit Date": "2025-02-10", "Status": "Planned", "Opportunities Values I Euro": 25000, "Remarks": "First meeting" }
+            ];
+
+            await saveToStorage();
+        }
 
         // --- INIT ---
-        document.addEventListener('DOMContentLoaded', () => {
-            if (currentUser) {
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadFromStorage();
+            const savedUser = localStorage.getItem('user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
                 showApp();
             } else {
                 document.getElementById('auth-screen').style.display = 'flex';
@@ -237,20 +368,16 @@
         });
 
         // --- AUTH ---
-        async function handleLogin() {
+        function handleLogin() {
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             
-            const res = await fetch(`${API_URL}/login`, {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({email, password})
-            });
-            const data = await res.json();
-            if (data.success) {
-                currentUser = data.user;
+            if (email && password) {
+                currentUser = { id: 'user1', email: email };
                 localStorage.setItem('user', JSON.stringify(currentUser));
                 showApp();
             } else {
-                alert(data.error);
+                alert('Please enter email and password');
             }
         }
 
@@ -263,243 +390,44 @@
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('app-screen').style.display = 'flex';
             document.getElementById('user-display').innerText = currentUser.email;
-            loadData();
+            switchTab('dashboard');
         }
 
-        // --- DATA LOAD ---
-        async function loadData() {
-            // 1. Always Load Customers (Required for Dropdown)
-            const cRes = await fetch(`${API_URL}/customers?userId=${currentUser.id}`);
-            customers = await cRes.json();
-            
-            // 2. Load Visits if needed
-            if (currentTab === 'visits') {
-                const vRes = await fetch(`${API_URL}/visits?userId=${currentUser.id}`);
-                visits = await vRes.json();
-            }
-            
-            // 3. Update Dashboard if needed
-            if (currentTab === 'dashboard') {
-                const kpiRes = await fetch(`${API_URL}/kpi?userId=${currentUser.id}`);
-                const kpi = await kpiRes.json();
-                document.getElementById('stat-total').innerText = kpi.totalVisits;
-                document.getElementById('stat-opp').innerText = '€' + kpi.totalOpp.toLocaleString();
-                document.getElementById('stat-order').innerText = '€' + kpi.totalOrder.toLocaleString();
-            }
-
-            renderView();
-        }
-
+        // --- TAB SWITCHING ---
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-            if(tab==='visits') document.querySelectorAll('nav button')[0].classList.add('active');
-            if(tab==='customers') document.querySelectorAll('nav button')[1].classList.add('active');
-            if(tab==='dashboard') document.querySelectorAll('nav button')[2].classList.add('active');
+            const buttons = document.querySelectorAll('nav button');
+            if(tab==='dashboard') buttons[0].classList.add('active');
+            if(tab==='visits') buttons[1].classList.add('active');
+            if(tab==='customers') buttons[2].classList.add('active');
 
             document.getElementById('view-dashboard').style.display = tab === 'dashboard' ? 'block' : 'none';
             document.getElementById('view-data').style.display = tab === 'dashboard' ? 'none' : 'block';
-            document.getElementById('page-title').innerText = tab === 'visits' ? 'Visit Planner' : tab === 'customers' ? 'Customer Master' : 'Analytics / KPI';
             
-            loadData();
-        }
-
-        // --- DROPDOWN LOGIC (THE FIX) ---
-        function renderCustomerDropdown() {
-            const select = document.getElementById('customer_select');
-            select.innerHTML = '<option value="" disabled selected>-- Select Customer --</option>';
+            const titles = { dashboard: 'Dashboard', visits: 'Visit Planner', customers: 'Customer Master' };
+            document.getElementById('page-title').innerText = titles[tab];
             
-            if(customers.length === 0) {
-                const opt = document.createElement('option');
-                opt.innerText = "No customers in database";
-                select.appendChild(opt);
-                return;
-            }
-
-            customers.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c._id; // Value is the ID for logic
-                // Display: "Code - Company Name"
-                opt.text = `${c["Customer Code"]} - ${c["COMPANY"]}`;
-                select.appendChild(opt);
-            });
-        }
-
-// Find this function and replace it with the updated version
-function onCustomerSelectChange(selectEl) {
-    const customerId = selectEl.value;
-    if (!customerId) return;
-
-    const customer = customers.find(c => c._id == customerId);
-
-    if (customer) {
-        document.getElementById('v_code').value = customer["Customer Code"] || "";
-        document.getElementById('v_company').value = customer["COMPANY"] || "";
-        document.getElementById('v_country').value = customer["COUNTRY"] || "";
-        document.getElementById('v_address').value = customer["ADDRESS"] || "";
-        document.getElementById('v_place').value = "";
-    }
-}
-
-        // --- RENDER ---
-        function renderView() {
-            const tableHead = document.querySelector('#dataTable thead');
-            const tableBody = document.querySelector('#dataTable tbody');
-            const data = currentTab === 'visits' ? visits : customers;
-            const schema = currentTab === 'visits' ? ["Customer Code", "COMPANY", "COUNTRY", "Visit Plan", "Visit Date", "Status"] : ["Customer Code", "COMPANY", "COUNTRY", "80-20"];
-
-            tableHead.innerHTML = `<tr>${schema.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
-            tableBody.innerHTML = '';
-
-            data.forEach(row => {
-                let tr = `<tr>`;
-                schema.forEach(k => {
-                    let val = row[k];
-                    if(k === 'Status') val = `<span class="status-badge badge-${val.toLowerCase()}">${val}</span>`;
-                    tr += `<td>${val || ''}</td>`;
-                });
-                tr += `<td>
-                    <span class="action-icon" onclick='editEntry("${row._id}")' style="cursor:pointer; margin-right:5px;">✏️</span>
-                    <span class="action-icon" onclick="deleteEntry('${row._id}')" style="cursor:pointer; color:var(--danger);">🗑️</span>
-                </td>`;
-                tableBody.insertAdjacentHTML('beforeend', tr);
-            });
-        }
-
-        // --- MODAL ---
-        function openModal(row = null) {
-            document.getElementById('entryModal').classList.add('open');
-            if(currentTab === 'visits') {
-                document.getElementById('visitForm').style.display = 'block';
-                document.getElementById('customerForm').style.display = 'none';
-                
-                // Populate Dropdown based on available customers
-                renderCustomerDropdown();
-
-                if(row) {
-                    // If editing, set select to current customer
-                    document.getElementById('customer_select').value = row["Customer Code"] ? customers.find(c => c._id == row.createdBy)._id : "";
-                    document.getElementById('v_editId').value = row._id;
-                    document.getElementById('v_code').value = row["Customer Code"];
-                    document.getElementById('v_company').value = row["COMPANY"];
-                    document.getElementById('v_country').value = row["COUNTRY"];
-                    document.getElementById('v_address').value = row["ADDRESS"] || "";
-                    document.getElementById('v_place').value = row["PLACE"];
-                    document.getElementById('v_plan').value = row["Visit Plan"];
-                    document.getElementById('v_date').value = row["Visit Date"];
-                    document.getElementById('v_status').value = row["Status"];
-                    document.getElementById('v_val').value = row["Opportunities Values I Euro"];
-                    document.getElementById('v_remarks').value = row["Remarks"];
-                } else {
-                    document.getElementById('visitForm').reset();
-                    document.getElementById('v_editId').value = "";
-                    document.getElementById('customer_select').value = "";
-                }
+            if (tab === 'dashboard') {
+                updateDashboard();
             } else {
-                document.getElementById('visitForm').style.display = 'none';
-                document.getElementById('customerForm').style.display = 'block';
-                if(row) {
-                    document.getElementById('c_editId').value = row._id;
-                    document.getElementById('c_code').value = row["Customer Code"];
-                    document.getElementById('c_company').value = row["COMPANY"];
-                    document.getElementById('c_country').value = row["COUNTRY"];
-                    document.getElementById('c_address').value = row["ADDRESS"];
-                    document.getElementById('c_8020').value = row["80-20"];
-                    document.getElementById('c_resp').value = row["Service - Responsible"];
-                } else {
-                    document.getElementById('customerForm').reset();
-                    document.getElementById('c_editId').value = "";
-                }
+                renderView();
             }
         }
 
-        function closeModal() { document.getElementById('entryModal').classList.remove('open'); }
+        // --- DASHBOARD ---
+        function updateDashboard() {
+            const totalVisits = visits.length;
+            const totalOpp = visits.reduce((sum, v) => sum + (parseFloat(v["Opportunities Values I Euro"]) || 0), 0);
+            const completedVisits = visits.filter(v => v.Status === 'Completed').length;
+            const completionRate = totalVisits > 0 ? ((completedVisits / totalVisits) * 100).toFixed(1) : 0;
 
-        async function saveData() {
-            let payload = {};
-            const endpoint = currentTab === 'visits' ? `${API_URL}/visits` : `${API_URL}/customers`;
+            document.getElementById('stat-total').innerText = totalVisits;
+            document.getElementById('stat-opp').innerText = '€' + totalOpp.toLocaleString();
+            document.getElementById('stat-completed').innerText = completedVisits;
+            document.getElementById('stat-customers').innerText = customers.length;
             
-            if(currentTab === 'visits') {
-                // If select is used, we can rely on filled inputs, otherwise use inputs
-                payload = {
-                    _id: document.getElementById('v_editId').value,
-                    createdBy: currentUser.id,
-                    "Customer Code": document.getElementById('v_code').value,
-                    "COMPANY": document.getElementById('v_company').value,
-                    "COUNTRY": document.getElementById('v_country').value,
-                    "PLACE": document.getElementById('v_place').value,
-                    "ADDRESS": document.getElementById('v_address').value, // Use the address field filled from customer
-                    "Visit Plan": document.getElementById('v_plan').value,
-                    "Visit Date": document.getElementById('v_date').value,
-                    "Status": document.getElementById('v_status').value,
-                    "Opportunities Values I Euro": document.getElementById('v_val').value,
-                    "Remarks": document.getElementById('v_remarks').value
-                };
-            } else {
-                payload = {
-                    _id: document.getElementById('c_editId').value,
-                    createdBy: currentUser.id,
-                    "Customer Code": document.getElementById('c_code').value,
-                    "COMPANY": document.getElementById('c_company').value,
-                    "COUNTRY": document.getElementById('c_country').value,
-                    "ADDRESS": document.getElementById('c_address').value,
-                    "80-20": document.getElementById('c_8020').value,
-                    "Service - Responsible": document.getElementById('c_resp').value
-                };
-            }
-
-            await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-            closeModal();
-            loadData();
-        }
-
-        function editEntry(id) {
-            const data = currentTab === 'visits' ? visits.find(v => v._id === id) : customers.find(c => c._id === id);
-            openModal(data);
-        }
-
-        async function deleteEntry(id) {
-            if(!confirm("Delete?")) return;
-            const endpoint = currentTab === 'visits' ? `${API_URL}/visits/${id}` : `${API_URL}/customers/${id}`;
-            await fetch(endpoint, { method: 'DELETE' });
-            loadData();
-        }
-
-        function filterTable(q) {
-            const rows = document.querySelectorAll('#dataTable tbody tr');
-            q = q.toLowerCase();
-            rows.forEach(r => { r.style.display = r.innerText.toLowerCase().includes(q) ? '' : 'none'; });
-        }
-
-        // --- IMPORT/EXPORT ---
-        async function handleImport(input) {
-            const file = input.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const workbook = XLSX.read(e.target.result, {type: 'array'});
-                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                
-                await fetch(`${API_URL}/import`, {
-                    method: 'POST',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ type: currentTab, data: json, userId: currentUser.id })
-                });
-                alert(`Imported ${json.length} records`);
-                loadData();
-            };
-            reader.readAsArrayBuffer(file);
-            input.value = '';
-        }
-
-        function exportData() {
-            const data = currentTab === 'visits' ? visits : customers;
-            if(!data.length) return alert("No data");
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-            XLSX.writeFile(wb, `export_${currentTab}.xlsx`);
-        }
-    </script>
-</body>
-</html>
+            document.getElementById('stat-total-change').innerText = `${completedVisits} completed`;
+            document.getElementById('stat-opp-change').innerText = `Avg €${(totalOpp / (totalVisits || 1)).toFixed(0).toLocaleString()}`;
+            document.getElementById('stat-completion-rate').innerText = `${completionRate}% completion`;
+            document.getElementById('stat-customers-change').innerText = `${customers.filter(c => c["80-
